@@ -387,7 +387,12 @@ void Analyzer::nextOffset(PlayLayer* layer) {
 void Analyzer::finishInput(PlayLayer* layer) {
     auto& result = m_results[m_input];
     if (measureCbf && !result.unreliable && !result.capped) {
-        if (m_rightDeath || m_leftDeath) return this->startRefine(layer);
+        // In dual mode one click moves both players, but the split step only splits one
+        // of them, so fractional edges would be wrong there.
+        auto tick = Bot::get().replay.inputs[m_input].tick;
+        auto const& track = Bot::get().track;
+        bool dual = tick < track.size() && track[tick].dual;
+        if (!dual && (m_rightDeath || m_leftDeath)) return this->startRefine(layer);
         // Both sides stopped at a neighbouring input of the same button, not at a death.
         result.cbf = static_cast<float>(result.window());
     }

@@ -46,6 +46,14 @@ Bot::Bot() {
 void Bot::setMode(BotMode newMode) {
     mode = newMode;
     injecting = false;
+    if (mode == BotMode::Record || mode == BotMode::Play) {
+        // Click Between Frames moves the player between ticks and changes how many ticks
+        // run per frame: a recording made with it does not replay, and the analysis stops.
+        if (Loader::get()->isModLoaded("syzzi.click_between_frames")) {
+            Notification::create("Disable the Click Between Frames mod while using the bot: its inputs between ticks cannot be replayed",
+                NotificationIcon::Warning, 5.f)->show();
+        }
+    }
     if (mode == BotMode::Record) {
         // A fresh recording always starts from the beginning of the next attempt.
         replay.inputs.clear();
@@ -144,7 +152,12 @@ void Bot::onTickStart(GJBaseGameLayer* layer) {
 
 void Bot::onTickEnd(GJBaseGameLayer* layer) {
     if (analyzing) {
-        if (auto sim = SimController::active()) sim->onTickEnd(layer, tick);
+        if (auto sim = SimController::active()) {
+            sim->onTickEnd(layer, tick);
+            // The level is beaten the moment the end animation starts; levelComplete itself
+            // only comes after the animation, in real time, possibly during a later run.
+            if (layer->m_levelEndAnimationStarted) sim->onComplete();
+        }
     }
     else if (mode == BotMode::Play) {
         if (track.size() <= tick) track.resize(tick + 1);
@@ -171,6 +184,7 @@ TickState Bot::captureState(GJBaseGameLayer* layer) {
     TickState state;
     state.p1 = playerState(layer->m_player1);
     state.p2 = playerState(layer->m_player2);
+    state.dual = layer->m_gameState.m_isDualMode;
     state.valid = true;
     return state;
 }

@@ -53,6 +53,7 @@ struct PlayerState {
 struct TickState {
     PlayerState p1;
     PlayerState p2;
+    bool dual = false;
     bool valid = false;
 };
 

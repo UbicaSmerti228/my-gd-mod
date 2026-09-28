@@ -28,8 +28,13 @@ namespace {
     }
 
     // With the bot in use nothing gets saved: no stars, no new best, no completion.
+    // The game's own Click Between Steps is turned off too: it applies inputs between
+    // ticks, which a tick-based replay cannot reproduce.
     void applySafeMode(GJBaseGameLayer* layer) {
-        if (Bot::get().mode != BotMode::Off || Bot::get().analyzing) layer->m_isTestMode = true;
+        if (Bot::get().mode == BotMode::Off && !Bot::get().analyzing) return;
+        layer->m_isTestMode = true;
+        layer->m_clickBetweenSteps = false;
+        layer->m_clickOnSteps = false;
     }
 }
 
@@ -136,10 +141,9 @@ class $modify(BotPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
-        if (auto sim = SimController::active()) {
-            // Reaching the end during a simulation counts as surviving; the level is not finished.
-            return sim->onComplete();
-        }
+        // During a simulation the end is detected on the tick it happens (Bot::onTickEnd);
+        // this call comes after the end animation and the level must not actually finish.
+        if (SimController::active()) return;
         if (isHumanAttempt(this)) Forecast::onAttemptEnd(this, 1);
         applySafeMode(this);
         PlayLayer::levelComplete();

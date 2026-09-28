@@ -374,6 +374,8 @@ void RouteFinder::finish(PlayLayer* layer, bool found, std::string const& messag
     m_restorePending = false;
     m_restoreFrom = nullptr;
     this->leaveSimulation(layer);
+    // Without a route there is nothing to play back.
+    if (!found) Bot::get().mode = BotMode::Off;
     if (!message.empty()) {
         Notification::create(message, found ? NotificationIcon::Success : NotificationIcon::Warning, 6.f)->show();
     }

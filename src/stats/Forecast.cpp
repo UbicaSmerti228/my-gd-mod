@@ -93,11 +93,15 @@ namespace {
             while (first < n && replay.analysis[first].x < a.startX - 1.f) ++first;
             size_t last = first;  // inputs [first, last) were hit
             while (last < n && replay.analysis[last].x <= a.endX) ++last;
-            if (a.outcome == 0 && last > first) {
-                // The last input before the death is the one that was missed.
-                fail[last - 1] += 1.0;
-                --last;
-                ++deaths;
+            if (a.outcome == 0) {
+                // The last measured input before the death is the one that was missed.
+                size_t missed = last;
+                while (missed > first && w[missed - 1] <= 0.0) --missed;
+                if (missed > first) {
+                    fail[missed - 1] += 1.0;
+                    last = missed - 1;
+                    ++deaths;
+                }
             }
             else if (a.outcome == 1) {
                 last = n;

@@ -25,7 +25,10 @@ namespace {
             auto path = custom / (stem + ext);
             if (std::filesystem::exists(path)) return path;
         }
-        return Mod::get()->getResourcesDir() / (stem + ".wav");
+        // Packaged files normally land flat in the resources folder; keep the subfolder as a fallback.
+        auto flat = Mod::get()->getResourcesDir() / (stem + ".wav");
+        if (std::filesystem::exists(flat)) return flat;
+        return Mod::get()->getResourcesDir() / "sounds" / (stem + ".wav");
     }
 
     void loadAll(FMOD::System* system) {
