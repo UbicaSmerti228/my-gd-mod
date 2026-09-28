@@ -18,8 +18,8 @@ struct BotInput {
     uint8_t button;
     bool player1;
     bool down;
-    // Fraction of the tick at which the input happens (Click Between Frames style).
-    // Only the analyzer sets this; replays store whole ticks.
+    // Fraction of the tick at which the input happens (Click Between Frames style):
+    // recorded in CBF mode, and used by the analyzer to place inputs between ticks.
     float subtick = 0.f;
 };
 
@@ -112,13 +112,19 @@ public:
     // Show and score CBF (fractional) windows instead of whole ticks.
     bool useCbf = true;
 
-    // An input the analyzer placed between ticks, waiting for the player update of
-    // this tick to split it (see hooks.cpp).
-    struct PendingSplit {
-        bool active = false;
-        BotInput input {};
-    };
-    PendingSplit split;
+    // Record and replay inputs between ticks, for players using Click Between Frames
+    // (or the game's Click Between Steps).
+    bool cbfMode = false;
+
+    // Inputs of the current tick that happen between ticks, waiting for the player
+    // update of this tick to split its step (see hooks.cpp).
+    std::vector<BotInput> splits;
+    // Set while GJBaseGameLayer::processCommands runs.
+    bool inTick = false;
+    // Replay changed since it was last saved or loaded.
+    bool unsaved = false;
+    // Name the current replay was loaded from or saved as.
+    std::string replayName;
 
     // Measured physics rate: ticks per second of level time.
     int measuredTps = 0;
@@ -134,7 +140,8 @@ public:
     void onReset(GJBaseGameLayer* layer);
     void onTickStart(GJBaseGameLayer* layer);
     void onTickEnd(GJBaseGameLayer* layer);
-    void record(bool down, int button, bool player1);
+    void record(GJBaseGameLayer* layer, bool down, int button, bool player1);
+    void applySplitsNow(GJBaseGameLayer* layer);
 
     static TickState captureState(GJBaseGameLayer* layer);
 
@@ -142,6 +149,7 @@ public:
     static std::filesystem::path replayDir();
     static std::vector<std::string> listReplays();
     geode::Result<> save(std::string const& name) const;
+    void markSaved(std::string const& name);
     geode::Result<> load(std::string const& name);
     static geode::Result<> remove(std::string const& name);
 
@@ -150,4 +158,9 @@ private:
 
     uint32_t m_tpsStartTick = 0;
     double m_tpsStartTime = 0.0;
+
+    // Player x at the start of this tick and how far it moved during the last one,
+    // to tell how much of the tick had passed when an input came in (CBF mode).
+    float m_tickStartX[2] = { 0.f, 0.f };
+    float m_lastStepX[2] = { 0.f, 0.f };
 };

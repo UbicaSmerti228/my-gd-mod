@@ -28,13 +28,16 @@ namespace {
     }
 
     // With the bot in use nothing gets saved: no stars, no new best, no completion.
-    // The game's own Click Between Steps is turned off too: it applies inputs between
-    // ticks, which a tick-based replay cannot reproduce.
+    // Outside CBF mode the game's own Click Between Steps is turned off too: it applies
+    // inputs between ticks, which a whole-tick replay cannot reproduce.
     void applySafeMode(GJBaseGameLayer* layer) {
-        if (Bot::get().mode == BotMode::Off && !Bot::get().analyzing) return;
+        auto& bot = Bot::get();
+        if (bot.mode == BotMode::Off && !bot.analyzing) return;
         layer->m_isTestMode = true;
-        layer->m_clickBetweenSteps = false;
-        layer->m_clickOnSteps = false;
+        if (!bot.cbfMode || bot.analyzing) {
+            layer->m_clickBetweenSteps = false;
+            layer->m_clickOnSteps = false;
+        }
     }
 }
 
@@ -46,7 +49,7 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
         }
         // During playback and analysis the player's own clicks are ignored.
         if (bot.mode == BotMode::Play || bot.analyzing) return;
-        if (bot.mode == BotMode::Record) bot.record(down, button, isPlayer1);
+        if (bot.mode == BotMode::Record) bot.record(this, down, button, isPlayer1);
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
     }
 
@@ -56,7 +59,9 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
         }
         auto& bot = Bot::get();
         bot.onTickStart(this);
+        bot.inTick = true;
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+        bot.inTick = false;
         bot.onTickEnd(this);
     }
 
@@ -242,9 +247,9 @@ class $modify(BotPauseLayer, PauseLayer) {
 };
 
 // Inputs between ticks, the way Click Between Frames does it (MIT, theyareonit/Click-Between-Frames):
-// the player's step is split at the input's fraction, the first part is moved and
-// collided, the input is applied, and the rest of the step runs. Only the analyzer
-// places inputs between ticks.
+// the player's step is split at each input's fraction, each part is moved and
+// collided, the input is applied, and the rest of the step runs. Such inputs come
+// from CBF-mode recordings and from the analyzer.
 namespace {
     bool s_midStep = false;
     struct RotationFix {
@@ -269,14 +274,26 @@ class $modify(BotPlayerObject, PlayerObject) {
     void update(float dt) {
         auto& bot = Bot::get();
         auto pl = PlayLayer::get();
-        if (!bot.split.active || s_midStep || !pl) return PlayerObject::update(dt);
+        if (bot.splits.empty() || s_midStep || !pl) return PlayerObject::update(dt);
 
-        auto const& input = bot.split.input;
-        bool toP2 = !input.player1 && pl->m_gameState.m_isDualMode;
-        if (this != (toP2 ? pl->m_player2 : pl->m_player1)) return PlayerObject::update(dt);
+        // The inputs of this tick that belong to this player, in time order.
+        bool dual = pl->m_gameState.m_isDualMode;
+        std::vector<BotInput> mine;
+        auto& pending = bot.splits;
+        for (auto it = pending.begin(); it != pending.end();) {
+            bool toP2 = !it->player1 && dual;
+            if (this == (toP2 ? pl->m_player2 : pl->m_player1)) {
+                mine.push_back(*it);
+                it = pending.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+        if (mine.empty()) return PlayerObject::update(dt);
+        std::stable_sort(mine.begin(), mine.end(), [](auto const& a, auto const& b) { return a.subtick < b.subtick; });
 
-        bot.split.active = false;
-        auto apply = [&] {
+        auto apply = [&](BotInput const& input) {
             bot.injecting = true;
             pl->handleButton(input.down, input.button, input.player1);
             bot.injecting = false;
@@ -289,20 +306,29 @@ class $modify(BotPlayerObject, PlayerObject) {
             || m_isDart || m_isBird || m_isShip || m_isSwing;
         if (!notBuffering) {
             PlayerObject::update(dt);
-            return apply();
+            for (auto const& input : mine) apply(input);
+            return;
         }
 
         auto position = this->getPosition();
-        float first = dt * input.subtick;
+        float done = 0.f;
+        bool first = true;
         s_midStep = true;
-        PlayerObject::update(first);
-        if ((m_yVelocity < 0) ^ m_isUpsideDown) m_isOnGround = startedOnGround;
-        if (!m_isOnSlope || m_isDart) pl->checkCollisions(this, 0.f, true);
-        else pl->checkCollisions(this, dt, true);
-        PlayerObject::updateRotation(first);
-        resetCollisionLog(this);
-        apply();
-        float rest = dt - first;
+        for (auto const& input : mine) {
+            float part = dt * input.subtick - done;
+            if (part > 0.f) {
+                PlayerObject::update(part);
+                if (first && ((m_yVelocity < 0) ^ m_isUpsideDown)) m_isOnGround = startedOnGround;
+                if (!m_isOnSlope || m_isDart) pl->checkCollisions(this, 0.f, true);
+                else pl->checkCollisions(this, dt, true);
+                PlayerObject::updateRotation(part);
+                resetCollisionLog(this);
+                done += part;
+                first = false;
+            }
+            apply(input);
+        }
+        float rest = std::max(dt - done, 0.f);
         PlayerObject::update(rest);
         s_midStep = false;
         s_rotationFix = { this, rest, position };

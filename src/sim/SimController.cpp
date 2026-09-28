@@ -29,7 +29,7 @@ void SimController::repressHeld(GJBaseGameLayer* layer) {
 
 void SimController::restore(PlayLayer* layer, CheckpointObject* checkpoint) {
     Bot::get().injecting = false;
-    Bot::get().split.active = false;
+    Bot::get().splits.clear();
     layer->m_checkpointArray->removeAllObjects();
     if (checkpoint) layer->m_checkpointArray->addObject(checkpoint);
     layer->resetLevel();
@@ -61,7 +61,7 @@ void SimController::leaveSimulation(PlayLayer* layer) {
     auto& bot = Bot::get();
     bot.analyzing = false;
     bot.simInputs.clear();
-    bot.split.active = false;
+    bot.splits.clear();
     if (!m_entered) return;
     m_entered = false;
     if (layer) {

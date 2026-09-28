@@ -2,6 +2,7 @@
 #include "../analysis/Analyzer.hpp"
 #include "../analysis/LStar.hpp"
 #include "../sim/RouteFinder.hpp"
+#include "../stats/Forecast.hpp"
 
 #include <Geode/ui/SliderNode.hpp>
 #include <fmt/format.h>
@@ -9,10 +10,12 @@
 using namespace geode::prelude;
 
 namespace {
-    constexpr float WIDTH = 400.f;
-    constexpr float HEIGHT = 350.f;
-    constexpr float LIST_WIDTH = 180.f;
-    constexpr float LIST_HEIGHT = 108.f;
+    // GD's screen is 569 x 320 units; the popup has to leave room around it.
+    constexpr float WIDTH = 420.f;
+    constexpr float HEIGHT = 280.f;
+    constexpr float LIST_WIDTH = 190.f;
+    constexpr float LIST_HEIGHT = 82.f;
+    constexpr float RIGHT_X = 312.f;
 
     NineSlice* makePanel(CCSize size) {
         auto panel = NineSlice::createWithSpriteFrameName("square02_small.png");
@@ -46,61 +49,147 @@ BotPopup* BotPopup::create() {
 
 bool BotPopup::init() {
     if (!Popup::init(WIDTH, HEIGHT, "GJ_square02.png")) return false;
-    this->setTitle("ILL Replay Bot", "goldFont.fnt", 0.8f, 18.f);
+    this->setTitle("ILL Replay Bot", "goldFont.fnt", 0.75f, 16.f);
 
-    // Mode tabs
+    auto help = CCMenuItemExt::createSpriteExtraWithFrameName("GJ_infoIcon_001.png", 0.7f, [this](CCMenuItemSpriteExtra*) {
+        this->showHelp();
+    });
+    m_buttonMenu->addChildAtPosition(help, Anchor::TopRight, { -20.f, -20.f });
+
+    m_replayPage = CCNode::create();
+    m_replayPage->setContentSize({ WIDTH, HEIGHT });
+    m_replayMenu = CCMenu::create();
+    m_replayMenu->setContentSize({ WIDTH, HEIGHT });
+    m_replayMenu->ignoreAnchorPointForPosition(false);
+    m_replayPage->addChildAtPosition(m_replayMenu, Anchor::Center);
+    m_mainLayer->addChild(m_replayPage);
+
+    m_analysisPage = CCNode::create();
+    m_analysisPage->setContentSize({ WIDTH, HEIGHT });
+    m_analysisMenu = CCMenu::create();
+    m_analysisMenu->setContentSize({ WIDTH, HEIGHT });
+    m_analysisMenu->ignoreAnchorPointForPosition(false);
+    m_analysisPage->addChildAtPosition(m_analysisMenu, Anchor::Center);
+    m_mainLayer->addChild(m_analysisPage);
+
+    this->buildReplayPage();
+    this->buildAnalysisPage();
+
+    m_pageTabs = CCMenu::create();
+    m_pageTabs->setContentSize({ WIDTH, 24.f });
+    m_pageTabs->ignoreAnchorPointForPosition(false);
+    m_mainLayer->addChildAtPosition(m_pageTabs, Anchor::Top, { 0.f, -42.f });
+    // Open on the analysis page while something runs there.
+    this->showPage(SimController::active() ? 1 : 0);
+    return true;
+}
+
+void BotPopup::buildPageTabs() {
+    m_pageTabs->removeAllChildren();
+    char const* names[] = { "Replay", "Analysis" };
+    for (int i = 0; i < 2; ++i) {
+        bool selected = m_page == i;
+        auto sprite = ButtonSprite::create(names[i], 90, 0, 0.5f, true, "bigFont.fnt",
+            selected ? "GJ_button_02.png" : "GJ_button_04.png", 22.f);
+        if (!selected) sprite->setOpacity(170);
+        auto button = CCMenuItemExt::createSpriteExtra(sprite, [this, i](CCMenuItemSpriteExtra*) {
+            if (m_page == i) return;
+            // The pressed tab is still running its callback, so rebuild next frame.
+            queueInMainThread([self = Ref(this), i] { self->showPage(i); });
+        });
+        m_pageTabs->addChildAtPosition(button, Anchor::Center, { i == 0 ? -52.f : 52.f, 0.f });
+    }
+}
+
+void BotPopup::showPage(int page) {
+    m_page = page;
+    m_replayPage->setVisible(page == 0);
+    m_analysisPage->setVisible(page == 1);
+    this->buildPageTabs();
+    this->refreshInfo();
+}
+
+void BotPopup::addToggle(CCNode* page, CCMenu* menu, char const* label, char const* key, bool Bot::* field,
+    CCPoint position, std::function<void()> onChange) {
+    std::string savedKey = key;
+    auto toggler = CCMenuItemExt::createTogglerWithStandardSprites(0.6f, [this, field, savedKey, onChange](CCMenuItemToggler* toggler) {
+        // The callback runs before the toggle flips its state.
+        auto& bot = Bot::get();
+        bot.*field = !toggler->isToggled();
+        Mod::get()->setSavedValue(savedKey, bot.*field);
+        if (onChange) onChange();
+        this->refreshInfo();
+    });
+    toggler->toggle(Bot::get().*field);
+    menu->addChildAtPosition(toggler, Anchor::BottomLeft, position);
+    auto text = CCLabelBMFont::create(label, "bigFont.fnt");
+    text->setScale(0.36f);
+    text->setAnchorPoint({ 0.f, 0.5f });
+    page->addChildAtPosition(text, Anchor::BottomLeft, position + CCPoint { 14.f, 0.f });
+}
+
+void BotPopup::buildReplayPage() {
+    auto page = m_replayPage;
+    auto menu = m_replayMenu;
+
+    // Mode tabs and Start
     m_tabMenu = CCMenu::create();
     m_tabMenu->setContentSize({ WIDTH, 30.f });
     m_tabMenu->ignoreAnchorPointForPosition(false);
-    m_mainLayer->addChildAtPosition(m_tabMenu, Anchor::Top, { 0.f, -52.f });
+    page->addChildAtPosition(m_tabMenu, Anchor::Top, { 0.f, -78.f });
     this->buildModeTabs();
 
-    // Status panel
-    auto infoPanel = makePanel({ WIDTH - 30.f, 50.f });
-    m_mainLayer->addChildAtPosition(infoPanel, Anchor::Top, { 0.f, -100.f });
+    auto start = CCMenuItemExt::createSpriteExtra(
+        ButtonSprite::create("Start", 80, 0, 0.6f, true, "bigFont.fnt", "GJ_button_01.png", 28.f),
+        [this](CCMenuItemSpriteExtra*) { this->resumeGame(true); }
+    );
+    menu->addChildAtPosition(start, Anchor::TopRight, { -60.f, -78.f });
+
+    // Status
+    page->addChildAtPosition(makePanel({ WIDTH - 30.f, 38.f }), Anchor::Top, { 0.f, -117.f });
     m_infoLabel = CCLabelBMFont::create("", "chatFont.fnt");
     m_infoLabel->setScale(0.62f);
     m_infoLabel->setAlignment(kCCTextAlignmentCenter);
-    m_mainLayer->addChildAtPosition(m_infoLabel, Anchor::Top, { 0.f, -100.f });
+    page->addChildAtPosition(m_infoLabel, Anchor::Top, { 0.f, -117.f });
 
-    // Left column: saved replays
-    m_mainLayer->addChildAtPosition(makeCaption("Saved replays"), Anchor::BottomLeft, { 110.f, 208.f });
-    auto listPanel = makePanel({ LIST_WIDTH + 10.f, LIST_HEIGHT + 8.f });
-    m_mainLayer->addChildAtPosition(listPanel, Anchor::BottomLeft, { 110.f, 140.f });
+    // Saved replays
+    page->addChildAtPosition(makeCaption("Saved replays"), Anchor::BottomLeft, { 115.f, 132.f });
+    page->addChildAtPosition(makePanel({ LIST_WIDTH + 10.f, LIST_HEIGHT + 8.f }), Anchor::BottomLeft, { 115.f, 78.f });
     m_list = ScrollLayer::create({ LIST_WIDTH, LIST_HEIGHT });
     m_list->m_contentLayer->setLayout(ScrollLayer::createDefaultListLayout(2.f));
-    m_list->setPosition({ 110.f - LIST_WIDTH / 2.f, 140.f - LIST_HEIGHT / 2.f });
-    m_mainLayer->addChild(m_list);
+    m_list->setPosition({ 115.f - LIST_WIDTH / 2.f, 78.f - LIST_HEIGHT / 2.f });
+    page->addChild(m_list);
 
-    // Right column: save, speed, analysis
-    auto rightX = 300.f;
-    m_mainLayer->addChildAtPosition(makeCaption("Save current"), Anchor::BottomLeft, { rightX, 208.f });
-
+    // Save
+    page->addChildAtPosition(makeCaption("Save current"), Anchor::BottomLeft, { RIGHT_X, 132.f });
     m_nameInput = TextInput::create(150.f, "replay name");
     m_nameInput->setFilter("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-.");
     m_nameInput->setMaxCharCount(64);
-    m_nameInput->setScale(0.85f);
-    if (auto pl = PlayLayer::get(); pl && pl->m_level) {
-        m_nameInput->setString(pl->m_level->m_levelName.c_str());
-    }
-    m_mainLayer->addChildAtPosition(m_nameInput, Anchor::BottomLeft, { rightX, 184.f });
+    m_nameInput->setScale(0.8f);
+    auto const& bot = Bot::get();
+    if (!bot.replayName.empty()) m_nameInput->setString(bot.replayName.c_str());
+    else if (auto pl = PlayLayer::get(); pl && pl->m_level) m_nameInput->setString(pl->m_level->m_levelName.c_str());
+    page->addChildAtPosition(m_nameInput, Anchor::BottomLeft, { RIGHT_X, 110.f });
 
     auto saveBtn = CCMenuItemExt::createSpriteExtra(
-        ButtonSprite::create("Save", 80, 0, 0.7f, true, "bigFont.fnt", "GJ_button_01.png", 26.f),
+        ButtonSprite::create("Save", 80, 0, 0.6f, true, "bigFont.fnt", "GJ_button_01.png", 24.f),
         [this](CCMenuItemSpriteExtra*) {
             auto name = std::string(m_nameInput->getString().c_str());
-            auto res = Bot::get().save(name);
+            auto& bot = Bot::get();
+            auto res = bot.save(name);
             if (!res) return this->notify(res.unwrapErr(), false);
+            bot.markSaved(name);
             this->notify(fmt::format("Saved \"{}\"", name), true);
             this->refreshList();
+            this->refreshInfo();
         }
     );
-    m_buttonMenu->addChildAtPosition(saveBtn, Anchor::BottomLeft, { rightX, 156.f });
+    menu->addChildAtPosition(saveBtn, Anchor::BottomLeft, { RIGHT_X, 84.f });
 
+    // Speed
     m_speedLabel = CCLabelBMFont::create("", "bigFont.fnt");
     m_speedLabel->setScale(0.4f);
-    m_mainLayer->addChildAtPosition(m_speedLabel, Anchor::BottomLeft, { rightX, 132.f });
-
+    page->addChildAtPosition(m_speedLabel, Anchor::BottomLeft, { RIGHT_X, 60.f });
     auto slider = SliderNode::create([this](SliderNode*, float value) {
         Bot::get().setSpeed(value);
         m_speedLabel->setString(fmt::format("Speed x{:.2f}", Bot::get().speed).c_str());
@@ -110,18 +199,42 @@ bool BotPopup::init() {
     slider->setSnapStep(0.05f);
     slider->setValue(Bot::get().speed);
     slider->setScale(0.7f);
-    m_mainLayer->addChildAtPosition(slider, Anchor::BottomLeft, { rightX, 114.f });
+    page->addChildAtPosition(slider, Anchor::BottomLeft, { RIGHT_X, 42.f });
     m_speedLabel->setString(fmt::format("Speed x{:.2f}", Bot::get().speed).c_str());
 
-    // Actions: analyze, optimize (center every input in its window), find a route
-    struct Action { char const* label; char const* texture; int kind; };
+    // Bottom row
+    this->addToggle(page, menu, "On-screen label", "show-overlay", &Bot::showOverlay, { 20.f, 16.f });
+    this->addToggle(page, menu, "CBF mode", "cbf-mode", &Bot::cbfMode, { 190.f, 16.f });
+    auto folderBtn = CCMenuItemExt::createSpriteExtra(
+        ButtonSprite::create("Folder", 60, 0, 0.45f, true, "bigFont.fnt", "GJ_button_04.png", 22.f),
+        [](CCMenuItemSpriteExtra*) {
+            (void)file::createDirectoryAll(Bot::replayDir());
+            file::openFolder(Bot::replayDir());
+        }
+    );
+    menu->addChildAtPosition(folderBtn, Anchor::BottomRight, { -45.f, 16.f });
+
+    this->refreshList();
+}
+
+void BotPopup::buildAnalysisPage() {
+    auto page = m_analysisPage;
+    auto menu = m_analysisMenu;
+
+    page->addChildAtPosition(makePanel({ WIDTH - 30.f, 56.f }), Anchor::Top, { 0.f, -95.f });
+    m_analysisInfo = CCLabelBMFont::create("", "chatFont.fnt");
+    m_analysisInfo->setScale(0.6f);
+    m_analysisInfo->setAlignment(kCCTextAlignmentCenter);
+    page->addChildAtPosition(m_analysisInfo, Anchor::Top, { 0.f, -95.f });
+
+    struct Action { char const* label; char const* texture; int kind; char const* hint; };
     Action actions[] = {
-        { "Analyze", "GJ_button_03.png", 0 },
-        { "Optimize", "GJ_button_02.png", 1 },
-        { "Find route", "GJ_button_05.png", 2 },
+        { "Analyze", "GJ_button_03.png", 0, "Frame window\nof every click" },
+        { "Optimize", "GJ_button_02.png", 1, "Move clicks to the\nmiddle of their windows" },
+        { "Find route", "GJ_button_05.png", 2, "Beat the level\nwithout a replay" },
     };
     auto running = SimController::active();
-    float ax = 70.f;
+    float x = 75.f;
     for (auto const& action : actions) {
         bool isRunning = running && (
             (action.kind == 2 && running == &RouteFinder::get()) ||
@@ -141,58 +254,30 @@ bool BotPopup::init() {
                 auto res = kind == 2 ? RouteFinder::get().start(PlayLayer::get())
                     : Analyzer::get().start(PlayLayer::get(), kind == 1);
                 if (!res) return this->notify(res.unwrapErr(), false);
-                this->notify(kind == 2
-                    ? "Resume the game: the route search plays the level by itself (can take a long time)"
-                    : "Resume the game: the analysis runs in the level (may take a few minutes)", true);
-                this->onClose(nullptr);
+                // It runs in the level: unpause straight away. Progress is shown bottom right.
+                this->resumeGame(false);
             }
         );
-        m_buttonMenu->addChildAtPosition(button, Anchor::BottomLeft, { ax, 58.f });
-        ax += 130.f;
+        menu->addChildAtPosition(button, Anchor::BottomLeft, { x, 138.f });
+        auto hint = CCLabelBMFont::create(action.hint, "chatFont.fnt");
+        hint->setScale(0.5f);
+        hint->setAlignment(kCCTextAlignmentCenter);
+        hint->setOpacity(200);
+        page->addChildAtPosition(hint, Anchor::BottomLeft, { x, 108.f });
+        x += 135.f;
     }
 
-    // Bottom row: display toggles and the replay folder
-    struct Toggle { char const* label; char const* key; bool Bot::* field; };
-    Toggle toggles[] = {
-        { "Label", "show-overlay", &Bot::showOverlay },
-        { "Counter", "show-counter", &Bot::showCounter },
-        { "Paths", "show-paths", &Bot::showPaths },
-        { "Sounds", "play-sounds", &Bot::playSounds },
-        { "CBF", "use-cbf", &Bot::useCbf },
-    };
-    float x = 16.f;
-    for (auto const& t : toggles) {
-        auto field = t.field;
-        std::string key = t.key;
-        auto toggler = CCMenuItemExt::createTogglerWithStandardSprites(0.55f, [field, key](CCMenuItemToggler* toggler) {
-            // The callback runs before the toggle flips its state.
-            auto& bot = Bot::get();
-            bot.*field = !toggler->isToggled();
-            Mod::get()->setSavedValue(key, bot.*field);
-            // Whole-tick and CBF windows give different L* values.
-            if (key == "use-cbf") LStar::computeAsync();
-        });
-        toggler->toggle(Bot::get().*field);
-        m_buttonMenu->addChildAtPosition(toggler, Anchor::BottomLeft, { x, 20.f });
-        auto label = CCLabelBMFont::create(t.label, "bigFont.fnt");
-        label->setScale(0.28f);
-        label->setAnchorPoint({ 0.f, 0.5f });
-        m_mainLayer->addChildAtPosition(label, Anchor::BottomLeft, { x + 13.f, 20.f });
-        x += 78.f;
-    }
+    page->addChildAtPosition(makeCaption("Show during playback"), Anchor::BottomLeft, { WIDTH / 2.f, 76.f });
+    this->addToggle(page, menu, "Counter", "show-counter", &Bot::showCounter, { 22.f, 50.f });
+    this->addToggle(page, menu, "Paths", "show-paths", &Bot::showPaths, { 122.f, 50.f });
+    this->addToggle(page, menu, "Sounds", "play-sounds", &Bot::playSounds, { 212.f, 50.f });
+    // Whole-tick and CBF windows give different L* values.
+    this->addToggle(page, menu, "CBF windows", "use-cbf", &Bot::useCbf, { 292.f, 50.f }, [] { LStar::computeAsync(); });
 
-    auto folderBtn = CCMenuItemExt::createSpriteExtra(
-        ButtonSprite::create("Folder", 50, 0, 0.4f, true, "bigFont.fnt", "GJ_button_04.png", 20.f),
-        [](CCMenuItemSpriteExtra*) {
-            (void)file::createDirectoryAll(Bot::replayDir());
-            file::openFolder(Bot::replayDir());
-        }
-    );
-    m_buttonMenu->addChildAtPosition(folderBtn, Anchor::TopRight, { -34.f, -20.f });
-
-    this->refreshInfo();
-    this->refreshList();
-    return true;
+    auto note = CCLabelBMFont::create("Counter, paths and L* appear in Play mode after an analysis.", "chatFont.fnt");
+    note->setScale(0.5f);
+    note->setOpacity(170);
+    page->addChildAtPosition(note, Anchor::Bottom, { 0.f, 20.f });
 }
 
 void BotPopup::buildModeTabs() {
@@ -205,18 +290,18 @@ void BotPopup::buildModeTabs() {
         { "Play", BotMode::Play, "GJ_button_01.png" },
     };
 
-    float x = WIDTH / 2.f - 100.f;
+    float x = 60.f;
     for (auto const& tab : tabs) {
         bool selected = Bot::get().mode == tab.mode;
         auto sprite = ButtonSprite::create(
-            tab.name, 90, 0, 0.6f, true, "bigFont.fnt",
+            tab.name, 80, 0, 0.55f, true, "bigFont.fnt",
             selected ? tab.texture : "GJ_button_04.png", 28.f
         );
         if (!selected) sprite->setOpacity(160);
         auto mode = tab.mode;
         auto button = CCMenuItemExt::createSpriteExtra(sprite, [this, mode](CCMenuItemSpriteExtra*) {
             auto& bot = Bot::get();
-            if (bot.mode == mode) return;
+            if (bot.mode == mode || SimController::active()) return;
 
             auto apply = [this, mode] {
                 auto& bot = Bot::get();
@@ -224,26 +309,18 @@ void BotPopup::buildModeTabs() {
                 // The pressed tab is still running its callback, so rebuild the tabs next frame.
                 queueInMainThread([self = Ref(this)] { self->buildModeTabs(); });
                 this->refreshInfo();
-                if (mode == BotMode::Play) {
-                    if (bot.replay.levelID && currentLevelID() && bot.replay.levelID != currentLevelID()) {
-                        this->notify("This replay was recorded on another level", false);
-                    }
-                    else if (bot.replay.tps && bot.measuredTps && bot.replay.tps != bot.measuredTps) {
-                        this->notify(fmt::format("Recorded at {} TPS, running at {} TPS", bot.replay.tps, bot.measuredTps), false);
-                    }
-                    else {
-                        this->notify("Restart the level to start playback", true);
-                    }
+                if (mode == BotMode::Play && bot.replay.levelID && currentLevelID() && bot.replay.levelID != currentLevelID()) {
+                    this->notify("This replay was recorded on another level", false);
                 }
-                else if (mode == BotMode::Record) {
-                    this->notify("Restart the level to start recording", true);
+                else if (mode == BotMode::Play && bot.replay.tps && bot.measuredTps && bot.replay.tps != bot.measuredTps) {
+                    this->notify(fmt::format("Recorded at {} TPS, running at {} TPS", bot.replay.tps, bot.measuredTps), false);
                 }
             };
 
-            if (mode == BotMode::Record && !bot.replay.inputs.empty()) {
+            if (mode == BotMode::Record && bot.unsaved && !bot.replay.inputs.empty()) {
                 createQuickPopup(
-                    "New recording",
-                    "The current replay will be <cr>discarded</c> unless you saved it. Continue?",
+                    "Unsaved replay",
+                    "The current replay is <cr>not saved</c> and will be replaced by the new recording. Continue?",
                     "Cancel", "Record",
                     [apply](FLAlertLayer*, bool yes) { if (yes) apply(); }
                 );
@@ -252,7 +329,7 @@ void BotPopup::buildModeTabs() {
             apply();
         });
         m_tabMenu->addChildAtPosition(button, Anchor::Left, { x, 0.f });
-        x += 100.f;
+        x += 90.f;
     }
 }
 
@@ -262,12 +339,23 @@ void BotPopup::refreshInfo() {
 
     char const* modeName = bot.mode == BotMode::Record ? "Recording"
         : bot.mode == BotMode::Play ? "Playback" : "Off";
-    auto level = replay.levelName.empty() ? std::string("no replay loaded") : replay.levelName;
-    auto tps = replay.tps ? fmt::format("{} TPS", replay.tps) : std::string("TPS not measured yet");
+    auto name = !bot.replayName.empty() ? bot.replayName
+        : !replay.levelName.empty() ? replay.levelName : std::string("no replay");
+    auto next = bot.mode == BotMode::Off ? std::string("pick Record or Play, then Start")
+        : std::string("press Start to restart the level");
 
-    std::string analysis;
+    if (m_infoLabel) {
+        m_infoLabel->setString(fmt::format(
+            "{}: {}{}   |   {}\n{} inputs   |   {} TPS{}",
+            modeName, name, bot.unsaved ? " (unsaved)" : "", next,
+            replay.inputs.size(), replay.effectiveTps(), bot.cbfMode ? "   |   CBF mode" : ""
+        ).c_str());
+    }
+
+    if (!m_analysisInfo) return;
+    std::string status;
     if (auto sim = SimController::active()) {
-        analysis = sim->statusText();
+        status = sim->statusText();
     }
     else if (replay.hasAnalysis()) {
         size_t counted = 0, unreliable = 0;
@@ -275,18 +363,20 @@ void BotPopup::refreshInfo() {
             counted += a.analyzed && !a.unreliable ? 1 : 0;
             unreliable += a.unreliable ? 1 : 0;
         }
-        auto lstar = !replay.lstar.empty() ? fmt::format("L* {:.2f}", replay.lstar.back())
-            : LStar::isComputing() ? std::string("L* computing...") : std::string("L* --");
-        analysis = fmt::format("Windows: {} analyzed, {} unreliable   |   {}", counted, unreliable, lstar);
+        status = fmt::format("{} clicks measured, {} could not be reproduced", counted, unreliable);
     }
     else {
-        analysis = "Windows not analyzed yet";
+        status = replay.inputs.empty() ? "Record or load a replay to analyze it" : "Not analyzed yet";
     }
 
-    m_infoLabel->setString(fmt::format(
-        "Mode: {}   |   {}\n{} inputs   |   {} ticks   |   {}\n{}",
-        modeName, level, replay.inputs.size(), replay.lastTick(), tps, analysis
-    ).c_str());
+    auto lstar = !replay.lstar.empty() ? fmt::format("Level L* {:.2f}{}", replay.lstar.back(), bot.useCbf ? " (CBF)" : "")
+        : LStar::isComputing() ? std::string("L* computing...") : std::string("L* -- (needs an analysis)");
+
+    auto const& estimate = Forecast::estimate();
+    auto forecast = estimate.valid ? fmt::format("Your L {:.1f} from {} attempts", estimate.precision, estimate.attempts)
+        : fmt::format("Your L: play the level ({} attempts, {} deaths logged)", estimate.attempts, estimate.deaths);
+
+    m_analysisInfo->setString(fmt::format("{}\n{}\n{}", status, lstar, forecast).c_str());
 }
 
 void BotPopup::refreshList() {
@@ -301,18 +391,22 @@ void BotPopup::refreshList() {
         content->addChild(empty);
     }
 
+    auto const& current = Bot::get().replayName;
     for (auto const& name : names) {
         auto row = CCMenu::create();
         row->ignoreAnchorPointForPosition(false);
         row->setContentSize({ LIST_WIDTH, 22.f });
 
+        bool loaded = name == current;
         auto bg = makePanel({ LIST_WIDTH - 4.f, 20.f });
-        bg->setOpacity(60);
+        bg->setOpacity(loaded ? 140 : 60);
+        if (loaded) bg->setColor({ 40, 120, 60 });
         row->addChildAtPosition(bg, Anchor::Center);
 
         auto label = CCLabelBMFont::create(name.c_str(), "bigFont.fnt");
         label->setAnchorPoint({ 0.f, 0.5f });
-        label->limitLabelWidth(110.f, 0.35f, 0.1f);
+        label->limitLabelWidth(120.f, 0.35f, 0.1f);
+        if (loaded) label->setColor({ 140, 255, 160 });
         row->addChildAtPosition(label, Anchor::Left, { 6.f, 0.f });
 
         auto loadBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
@@ -322,8 +416,11 @@ void BotPopup::refreshList() {
                 auto res = bot.load(name);
                 if (!res) return this->notify(res.unwrapErr(), false);
                 if (bot.mode == BotMode::Record) bot.setMode(BotMode::Off);
+                m_nameInput->setString(name.c_str());
                 this->buildModeTabs();
                 this->refreshInfo();
+                // Rebuilding the list removes this button, so do it next frame.
+                queueInMainThread([self = Ref(this)] { self->refreshList(); });
                 this->notify(fmt::format("Loaded \"{}\"", name), true);
             }
         );
@@ -356,4 +453,28 @@ void BotPopup::refreshList() {
 
 void BotPopup::notify(std::string const& text, bool ok) {
     Notification::create(text, ok ? NotificationIcon::Success : NotificationIcon::Warning)->show();
+}
+
+void BotPopup::resumeGame(bool restart) {
+    PauseLayer* pause = nullptr;
+    if (auto scene = CCDirector::get()->getRunningScene()) pause = scene->getChildByType<PauseLayer>(0);
+    Ref<PauseLayer> keep = pause;
+    this->onClose(nullptr);
+    if (!pause) return;
+    if (restart) pause->onRestartFull(nullptr);
+    else pause->onResume(nullptr);
+}
+
+void BotPopup::showHelp() {
+    FLAlertLayer::create(
+        nullptr, "How to use",
+        "<cg>Record</c>: pick Record, press Start, play the level (practice and start positions work), "
+        "then Save.\n"
+        "<cg>Showcase</c>: load a replay, pick Play, press Start.\n"
+        "<cg>CBF mode</c>: turn on if you play with Click Between Frames.\n"
+        "<cy>Analysis</c> page: Analyze measures every click's frame window and L*; "
+        "Optimize makes the replay safer; Find route beats the level with no replay.\n"
+        "While the bot is on, nothing is saved to your progress.",
+        "OK", nullptr, 420.f
+    )->show();
 }

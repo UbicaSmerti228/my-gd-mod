@@ -36,7 +36,7 @@ namespace {
 
     void sortByTick(std::vector<BotInput>& inputs) {
         std::stable_sort(inputs.begin(), inputs.end(), [](auto const& a, auto const& b) {
-            return a.tick < b.tick;
+            return a.tick < b.tick || (a.tick == b.tick && a.subtick < b.subtick);
         });
     }
 }
@@ -313,7 +313,8 @@ void Analyzer::beginCandidateAt(PlayLayer*, double offset) {
 
     bot.simInputs = bot.replay.inputs;
     auto& moved = bot.simInputs[m_input];
-    double time = moved.tick + offset;
+    // Inputs recorded between ticks (CBF mode) keep their fraction when shifted.
+    double time = moved.tick + static_cast<double>(moved.subtick) + offset;
     double whole = std::floor(time);
     moved.tick = static_cast<uint32_t>(std::max(0.0, whole));
     moved.subtick = static_cast<float>(time - whole);
@@ -517,6 +518,7 @@ void Analyzer::finishVerify(PlayLayer* layer) {
         size_t moved = 0;
         for (int s : m_shift) moved += s != 0 ? 1 : 0;
         bot.replay.inputs = optimizedInputs();
+        bot.unsaved = true;
         bot.replay.analysis.clear();
         bot.replay.lstar.clear();
         bot.replay.lstarShare.clear();

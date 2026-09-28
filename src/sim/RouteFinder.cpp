@@ -359,6 +359,8 @@ void RouteFinder::succeed(PlayLayer* layer) {
 
     auto name = routeName(bot.replay.levelName);
     auto saved = bot.save(name);
+    if (saved) bot.markSaved(name);
+    else bot.unsaved = true;
     auto text = saved
         ? fmt::format("Route found: {} inputs after {} simulations, saved as \"{}\"", m_path.size(), simulations, name)
         : fmt::format("Route found: {} inputs after {} simulations (not saved: {})", m_path.size(), simulations, saved.unwrapErr());

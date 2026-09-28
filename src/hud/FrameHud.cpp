@@ -117,7 +117,8 @@ bool FrameHud::init(PlayLayer* layer) {
     m_cpsLabel->setScale(0.35f);
     m_cpsLabel->setColor({ 200, 200, 200 });
     m_cpsLabel->setOpacity(170);
-    m_cpsLabel->setPosition({ winSize.width - 5.f, winSize.height - 5.f });
+    // Left of the pause button, which sits in the top right corner.
+    m_cpsLabel->setPosition({ winSize.width - 48.f, winSize.height - 5.f });
     this->addChild(m_cpsLabel);
 
     // Markers and trajectories live in the object layer, so they follow the camera.

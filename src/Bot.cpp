@@ -12,7 +12,7 @@ using namespace geode::prelude;
 
 namespace {
     constexpr char const* REPLAY_MAGIC = "ILR";
-    constexpr int REPLAY_VERSION = 4;
+    constexpr int REPLAY_VERSION = 5;
     constexpr char const* REPLAY_EXT = ".ilr";
 
     bool isValidName(std::string const& name) {
@@ -41,6 +41,7 @@ Bot::Bot() {
     showPaths = Mod::get()->getSavedValue<bool>("show-paths", true);
     playSounds = Mod::get()->getSavedValue<bool>("play-sounds", true);
     useCbf = Mod::get()->getSavedValue<bool>("use-cbf", true);
+    cbfMode = Mod::get()->getSavedValue<bool>("cbf-mode", false);
 }
 
 void Bot::setMode(BotMode newMode) {
@@ -49,9 +50,15 @@ void Bot::setMode(BotMode newMode) {
     if (mode == BotMode::Record || mode == BotMode::Play) {
         // Click Between Frames moves the player between ticks and changes how many ticks
         // run per frame: a recording made with it does not replay, and the analysis stops.
-        if (Loader::get()->isModLoaded("syzzi.click_between_frames")) {
-            Notification::create("Disable the Click Between Frames mod while using the bot: its inputs between ticks cannot be replayed",
-                NotificationIcon::Warning, 5.f)->show();
+        if (auto cbf = Loader::get()->getLoadedMod("syzzi.click_between_frames")) {
+            if (cbf->getSettingValue<bool>("physics-bypass")) {
+                Notification::create("Turn off Physics Bypass in Click Between Frames: the bot needs 240 ticks per second",
+                    NotificationIcon::Warning, 5.f)->show();
+            }
+            else if (!cbfMode && mode == BotMode::Record) {
+                Notification::create("Click Between Frames is on: enable CBF mode in the bot menu, or the recording will not replay",
+                    NotificationIcon::Warning, 5.f)->show();
+            }
         }
     }
     if (mode == BotMode::Record) {
@@ -90,7 +97,8 @@ void Bot::onLevelStart(GJGameLevel* level) {
 }
 
 void Bot::onReset(GJBaseGameLayer* layer) {
-    split.active = false;
+    splits.clear();
+    m_lastStepX[0] = m_lastStepX[1] = 0.f;
     m_tpsStartTick = tick;
     m_tpsStartTime = layer->m_gameState.m_levelTime;
 
@@ -126,21 +134,35 @@ void Bot::onReset(GJBaseGameLayer* layer) {
     }
 }
 
-void Bot::onTickStart(GJBaseGameLayer* layer) {
-    if (split.active) {
-        // The player update never picked up the split input: apply it on the tick boundary.
-        split.active = false;
+void Bot::applySplitsNow(GJBaseGameLayer* layer) {
+    auto pending = std::move(splits);
+    splits.clear();
+    for (auto const& i : pending) {
         injecting = true;
-        layer->handleButton(split.input.down, split.input.button, split.input.player1);
+        layer->handleButton(i.down, i.button, i.player1);
         injecting = false;
     }
+}
+
+void Bot::onTickStart(GJBaseGameLayer* layer) {
+    // Inputs the player update never picked up are applied on the tick boundary.
+    if (!splits.empty()) this->applySplitsNow(layer);
+
+    PlayerObject* players[2] = { layer->m_player1, layer->m_player2 };
+    for (int p = 0; p < 2; ++p) {
+        float x = players[p] ? players[p]->getPositionX() : 0.f;
+        m_lastStepX[p] = x - m_tickStartX[p];
+        m_tickStartX[p] = x;
+    }
+
     if (mode != BotMode::Play && !analyzing) return;
     auto const& in = playbackInputs();
     while (playIndex < in.size() && in[playIndex].tick <= tick) {
         auto index = playIndex++;
         auto const& i = in[index];
-        if (analyzing && i.subtick > 0.f) {
-            split = { true, i };
+        if (i.subtick > 0.f) {
+            splits.push_back(i);
+            if (!analyzing && onInputPlayed) onInputPlayed(index);
             continue;
         }
         injecting = true;
@@ -176,8 +198,21 @@ void Bot::onTickEnd(GJBaseGameLayer* layer) {
     }
 }
 
-void Bot::record(bool down, int button, bool player1) {
-    replay.inputs.push_back({ tick, static_cast<uint8_t>(button), player1, down });
+void Bot::record(GJBaseGameLayer* layer, bool down, int button, bool player1) {
+    float subtick = 0.f;
+    // With Click Between Frames the click lands inside the player's step, after part of
+    // the movement: how far the player got, against a whole step, is the fraction.
+    if (cbfMode && inTick) {
+        int p = !player1 && layer->m_gameState.m_isDualMode ? 1 : 0;
+        auto player = p ? layer->m_player2 : layer->m_player1;
+        float step = m_lastStepX[p];
+        if (player && std::abs(step) > 0.01f) {
+            float fraction = (player->getPositionX() - m_tickStartX[p]) / step;
+            if (fraction > 0.001f) subtick = std::min(fraction, 0.999f);
+        }
+    }
+    replay.inputs.push_back({ tick, static_cast<uint8_t>(button), player1, down, subtick });
+    unsaved = true;
 }
 
 TickState Bot::captureState(GJBaseGameLayer* layer) {
@@ -215,7 +250,7 @@ Result<> Bot::save(std::string const& name) const {
     out << "tps " << replay.tps << '\n';
     out << "inputs " << replay.inputs.size() << '\n';
     for (auto const& i : replay.inputs) {
-        out << i.tick << ' ' << int(i.button) << ' ' << int(i.player1) << ' ' << int(i.down) << '\n';
+        out << i.tick << ' ' << int(i.button) << ' ' << int(i.player1) << ' ' << int(i.down) << ' ' << i.subtick << '\n';
     }
     if (replay.hasAnalysis()) {
         out << "analysis " << replay.analysis.size() << '\n';
@@ -230,6 +265,11 @@ Result<> Bot::save(std::string const& name) const {
     auto res = file::writeStringSafe(replayDir() / (name + REPLAY_EXT), out.str());
     if (!res) return Err(res.unwrapErr());
     return Ok();
+}
+
+void Bot::markSaved(std::string const& name) {
+    replayName = name;
+    unsaved = false;
 }
 
 Result<> Bot::load(std::string const& name) {
@@ -253,8 +293,10 @@ Result<> Bot::load(std::string const& name) {
     loaded.inputs.reserve(count);
     for (size_t n = 0; n < count; ++n) {
         uint32_t tick; int button, player1, down;
+        float subtick = 0.f;
         if (!(in >> tick >> button >> player1 >> down)) return Err("Corrupted replay (input list)");
-        loaded.inputs.push_back({ tick, static_cast<uint8_t>(button), player1 != 0, down != 0 });
+        if (version >= 5 && !(in >> subtick)) return Err("Corrupted replay (input list)");
+        loaded.inputs.push_back({ tick, static_cast<uint8_t>(button), player1 != 0, down != 0, std::clamp(subtick, 0.f, 0.999f) });
     }
 
     while (in >> key) {
@@ -280,17 +322,19 @@ Result<> Bot::load(std::string const& name) {
 
     // Inputs are written sorted; an out-of-order file cannot keep its analysis aligned.
     bool sorted = std::is_sorted(loaded.inputs.begin(), loaded.inputs.end(), [](auto const& a, auto const& b) {
-        return a.tick < b.tick;
+        return a.tick < b.tick || (a.tick == b.tick && a.subtick < b.subtick);
     });
     if (!sorted) {
         std::stable_sort(loaded.inputs.begin(), loaded.inputs.end(), [](auto const& a, auto const& b) {
-            return a.tick < b.tick;
+            return a.tick < b.tick || (a.tick == b.tick && a.subtick < b.subtick);
         });
         loaded.analysis.clear();
     }
 
     Analyzer::get().clearPaths();
     replay = std::move(loaded);
+    replayName = name;
+    unsaved = false;
     playIndex = 0;
     track.clear();
     LStar::computeAsync();
