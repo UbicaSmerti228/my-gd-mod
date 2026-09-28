@@ -5,12 +5,14 @@
 #include "stats/Forecast.hpp"
 #include "hud/FrameHud.hpp"
 #include "ui/BotPopup.hpp"
+#include "ui/FrameControls.hpp"
 
 #include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
+#include <Geode/modify/UILayer.hpp>
 
 #include <fmt/format.h>
 
@@ -69,14 +71,26 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
     }
 
     void update(float dt) {
-        auto sim = SimController::active();
-        if (sim && isBotLayer(this)) {
-            sim->drive(static_cast<PlayLayer*>(static_cast<GJBaseGameLayer*>(this)), [this](float step) {
-                GJBaseGameLayer::update(step);
-            });
-            return;
+        if (!isBotLayer(this)) return GJBaseGameLayer::update(dt);
+        auto layer = static_cast<PlayLayer*>(static_cast<GJBaseGameLayer*>(this));
+        auto step = [this](float stepDt) { GJBaseGameLayer::update(stepDt); };
+
+        if (auto sim = SimController::active()) return sim->drive(layer, step);
+
+        auto& bot = Bot::get();
+        if (bot.frozen && bot.mode != BotMode::Off) {
+            // Frame advance: only the requested ticks run.
+            while (bot.pendingSteps > 0) {
+                --bot.pendingSteps;
+                for (int attempt = 0; attempt < 50; ++attempt) {
+                    if (SimController::stepOnce(layer, step) > 0) break;
+                }
+            }
         }
-        GJBaseGameLayer::update(dt);
+        else {
+            GJBaseGameLayer::update(dt);
+        }
+        if (auto controls = FrameControls::current()) controls->afterUpdate();
     }
 };
 
@@ -118,6 +132,7 @@ class $modify(BotPlayLayer, PlayLayer) {
         m_fields->hud = hud;
         CCNode* parent = m_uiLayer ? static_cast<CCNode*>(m_uiLayer) : this;
         parent->addChild(hud, 9999);
+        parent->addChild(FrameControls::create(this), 10001);
         parent->addChild(label, 10000);
         parent->addChild(back, 10000);
         m_fields->overlay = label;
@@ -146,6 +161,7 @@ class $modify(BotPlayLayer, PlayLayer) {
                 NotificationIcon::Warning, 4.f)->show();
         }
         if (auto hud = m_fields->hud) hud->resetTo(bot.tick);
+        if (auto controls = FrameControls::current()) controls->onLevelReset();
         applySafeMode(this);
         if (isHumanAttempt(this)) Forecast::onAttemptStart(this);
     }
@@ -388,6 +404,29 @@ class $modify(BotPlayerObject, PlayerObject) {
             return;
         }
         PlayerObject::updateRotation(dt);
+    }
+};
+
+class $modify(BotUILayer, UILayer) {
+    // Taps on the frame controls are button presses, not jumps.
+    bool ccTouchBegan(CCTouch* touch, CCEvent* event) {
+        if (auto controls = FrameControls::current(); controls && controls->hitsTouch(touch)) return false;
+        return UILayer::ccTouchBegan(touch, event);
+    }
+
+    // Keyboard frame controls while the bot is on: F freeze, V one tick, C rewind.
+    void keyDown(enumKeyCodes key, double timestamp) {
+        auto controls = FrameControls::current();
+        auto& bot = Bot::get();
+        if (controls && bot.frameControls && bot.mode != BotMode::Off && !SimController::active()) {
+            switch (key) {
+                case KEY_F: return controls->toggleFreeze();
+                case KEY_V: return controls->step(1);
+                case KEY_C: return controls->rewind();
+                default: break;
+            }
+        }
+        UILayer::keyDown(key, timestamp);
     }
 };
 

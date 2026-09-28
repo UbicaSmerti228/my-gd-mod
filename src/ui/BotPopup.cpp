@@ -16,7 +16,18 @@ namespace {
     constexpr float HEIGHT = 280.f;
     constexpr float LIST_WIDTH = 190.f;
     constexpr float LIST_HEIGHT = 82.f;
+#ifdef GEODE_IS_MOBILE
+    // Rows, icons and toggles sized for fingers.
+    constexpr float ROW_HEIGHT = 32.f;
+    constexpr float LOAD_ICON_SCALE = 0.42f;
+    constexpr float DELETE_ICON_SCALE = 0.62f;
+    constexpr float TOGGLE_SCALE = 0.72f;
+#else
     constexpr float ROW_HEIGHT = 27.f;
+    constexpr float LOAD_ICON_SCALE = 0.3f;
+    constexpr float DELETE_ICON_SCALE = 0.5f;
+    constexpr float TOGGLE_SCALE = 0.6f;
+#endif
     constexpr float RIGHT_X = 312.f;
 
     NineSlice* makePanel(CCSize size) {
@@ -114,7 +125,7 @@ void BotPopup::showPage(int page) {
 void BotPopup::addToggle(CCNode* page, CCMenu* menu, char const* label, char const* key, bool Bot::* field,
     CCPoint position, std::function<void()> onChange) {
     std::string savedKey = key;
-    auto toggler = CCMenuItemExt::createTogglerWithStandardSprites(0.6f, [this, field, savedKey, onChange](CCMenuItemToggler* toggler) {
+    auto toggler = CCMenuItemExt::createTogglerWithStandardSprites(TOGGLE_SCALE, [this, field, savedKey, onChange](CCMenuItemToggler* toggler) {
         // The callback runs before the toggle flips its state.
         auto& bot = Bot::get();
         bot.*field = !toggler->isToggled();
@@ -125,7 +136,7 @@ void BotPopup::addToggle(CCNode* page, CCMenu* menu, char const* label, char con
     toggler->toggle(Bot::get().*field);
     menu->addChildAtPosition(toggler, Anchor::BottomLeft, position);
     auto text = CCLabelBMFont::create(label, "bigFont.fnt");
-    text->setScale(0.36f);
+    text->setScale(0.33f);
     text->setAnchorPoint({ 0.f, 0.5f });
     page->addChildAtPosition(text, Anchor::BottomLeft, position + CCPoint { 14.f, 0.f });
 }
@@ -205,16 +216,42 @@ void BotPopup::buildReplayPage() {
     m_speedLabel->setString(fmt::format("Speed x{:.2f}", Bot::get().speed).c_str());
 
     // Bottom row
-    this->addToggle(page, menu, "On-screen label", "show-overlay", &Bot::showOverlay, { 20.f, 16.f });
-    this->addToggle(page, menu, "CBF mode", "cbf-mode", &Bot::cbfMode, { 190.f, 16.f });
-    auto folderBtn = CCMenuItemExt::createSpriteExtra(
-        ButtonSprite::create("Folder", 60, 0, 0.45f, true, "bigFont.fnt", "GJ_button_04.png", 22.f),
-        [](CCMenuItemSpriteExtra*) {
-            (void)file::createDirectoryAll(Bot::replayDir());
-            file::openFolder(Bot::replayDir());
+    this->addToggle(page, menu, "Label", "show-overlay", &Bot::showOverlay, { 14.f, 16.f });
+    this->addToggle(page, menu, "CBF", "cbf-mode", &Bot::cbfMode, { 84.f, 16.f });
+    this->addToggle(page, menu, "Clicks", "clickbot", &Bot::clickbot, { 144.f, 16.f });
+    this->addToggle(page, menu, "Controls", "frame-controls", &Bot::frameControls, { 222.f, 16.f });
+
+    auto exportBtn = CCMenuItemExt::createSpriteExtra(
+        ButtonSprite::create("Export", 56, 0, 0.4f, true, "bigFont.fnt", "GJ_button_04.png", 22.f),
+        [this](CCMenuItemSpriteExtra*) {
+            auto name = std::string(m_nameInput->getString().c_str());
+            auto res = Bot::get().exportGdr(name);
+            if (!res) return this->notify(res.unwrapErr(), false);
+            auto rounded = res.unwrap();
+            this->notify(rounded
+                ? fmt::format("Exported \"{}.gdr2\" ({} CBF clicks rounded to a tick)", name, rounded)
+                : fmt::format("Exported \"{}.gdr2\" for other bots", name), true);
+            this->refreshList();
         }
     );
-    menu->addChildAtPosition(folderBtn, Anchor::BottomRight, { -45.f, 16.f });
+    menu->addChildAtPosition(exportBtn, Anchor::BottomRight, { -88.f, 16.f });
+
+    auto folderBtn = CCMenuItemExt::createSpriteExtra(
+        ButtonSprite::create("Folder", 48, 0, 0.4f, true, "bigFont.fnt", "GJ_button_04.png", 22.f),
+        [](CCMenuItemSpriteExtra*) {
+            (void)file::createDirectoryAll(Bot::replayDir());
+#ifdef GEODE_IS_MOBILE
+            // No file manager to open from inside the game on phones: show where it is.
+            FLAlertLayer::create(nullptr, "Replay folder",
+                fmt::format("Replays (.ilr) and .gdr2 files from other bots go here:\n<cy>{}</c>",
+                    utils::string::pathToString(Bot::replayDir())),
+                "OK", nullptr, 380.f)->show();
+#else
+            file::openFolder(Bot::replayDir());
+#endif
+        }
+    );
+    menu->addChildAtPosition(folderBtn, Anchor::BottomRight, { -32.f, 16.f });
 
     this->refreshList();
 }
@@ -432,13 +469,15 @@ void BotPopup::refreshList() {
         row->addChildAtPosition(detailLabel, Anchor::Left, { 6.f, -6.f });
 
         auto loadBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
-            "GJ_playBtn2_001.png", 0.3f,
+            "GJ_playBtn2_001.png", LOAD_ICON_SCALE,
             [this, name](CCMenuItemSpriteExtra*) {
                 auto& bot = Bot::get();
                 auto res = bot.load(name);
                 if (!res) return this->notify(res.unwrapErr(), false);
                 if (bot.mode == BotMode::Record) bot.setMode(BotMode::Off);
-                m_nameInput->setString(name.c_str());
+                // A .gdr2 from another bot is saved back as this bot's own file.
+                auto plain = name.ends_with(".gdr2") ? name.substr(0, name.size() - 5) : name;
+                m_nameInput->setString(plain.c_str());
                 this->buildModeTabs();
                 this->refreshInfo();
                 // Rebuilding the list removes this button, so do it next frame.
@@ -446,10 +485,10 @@ void BotPopup::refreshList() {
                 this->notify(fmt::format("Loaded \"{}\"", name), true);
             }
         );
-        row->addChildAtPosition(loadBtn, Anchor::Right, { -40.f, 0.f });
+        row->addChildAtPosition(loadBtn, Anchor::Right, { -44.f, 0.f });
 
         auto deleteBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
-            "GJ_deleteIcon_001.png", 0.5f,
+            "GJ_deleteIcon_001.png", DELETE_ICON_SCALE,
             [this, name](CCMenuItemSpriteExtra*) {
                 createQuickPopup(
                     "Delete replay",

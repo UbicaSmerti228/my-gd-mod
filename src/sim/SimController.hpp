@@ -34,13 +34,14 @@ public:
     // The controller currently running, if any.
     static SimController* active();
 
-protected:
-    // Buttons held across a checkpoint are pressed again, like holding through a respawn.
-    static void repressHeld(GJBaseGameLayer* layer);
     // Restores the level to `checkpoint`, or to the start when it is null.
     static void restore(PlayLayer* layer, CheckpointObject* checkpoint);
     // Runs one update that advances physics by at most one tick; returns the ticks advanced.
     static uint32_t stepOnce(PlayLayer* layer, std::function<void(float)> const& step);
+
+protected:
+    // Buttons held across a checkpoint are pressed again, like holding through a respawn.
+    static void repressHeld(GJBaseGameLayer* layer);
 
     void enterSimulation(PlayLayer* layer);
     void leaveSimulation(PlayLayer* layer);

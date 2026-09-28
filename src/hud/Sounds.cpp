@@ -9,9 +9,13 @@
 using namespace geode::prelude;
 
 namespace {
-    constexpr std::array<char const*, 7> FILE_STEMS = {
+    // 0-6: frame window categories, 7-8: clickbot press / release.
+    constexpr std::array<char const*, 9> FILE_STEMS = {
         "fw-9-12", "fw-7-8", "fw-5-6", "fw-4", "fw-3", "fw-2", "fw-1",
+        "click-down", "click-up",
     };
+    constexpr int CLICK_DOWN = 7;
+    constexpr int CLICK_UP = 8;
 
     FMOD::ChannelGroup* s_group = nullptr;
     std::unordered_map<int, FMOD::Sound*> s_sounds;
@@ -56,8 +60,17 @@ namespace Sounds {
         return s_enabled;
     }
 
+    void playClick(bool down) {
+        playSound(down ? CLICK_DOWN : CLICK_UP);
+    }
+
     void playCategory(int category) {
-        if (!s_enabled || category < 0 || category >= static_cast<int>(FILE_STEMS.size())) return;
+        if (!s_enabled || category < 0 || category >= CLICK_DOWN) return;
+        playSound(category);
+    }
+
+    void playSound(int category) {
+        if (category < 0 || category >= static_cast<int>(FILE_STEMS.size())) return;
         auto engine = FMODAudioEngine::get();
         if (!engine || !engine->m_system || engine->m_sfxVolume <= 0.f) return;
         if (!s_loaded) loadAll(engine->m_system);

@@ -1,6 +1,7 @@
 #include "Bot.hpp"
 #include "analysis/Analyzer.hpp"
 #include "sim/SimController.hpp"
+#include "formats/Gdr.hpp"
 #include "analysis/LStar.hpp"
 
 #include <algorithm>
@@ -42,11 +43,15 @@ Bot::Bot() {
     playSounds = Mod::get()->getSavedValue<bool>("play-sounds", true);
     useCbf = Mod::get()->getSavedValue<bool>("use-cbf", true);
     cbfMode = Mod::get()->getSavedValue<bool>("cbf-mode", false);
+    clickbot = Mod::get()->getSavedValue<bool>("clickbot", false);
+    frameControls = Mod::get()->getSavedValue<bool>("frame-controls", true);
 }
 
 void Bot::setMode(BotMode newMode) {
     mode = newMode;
     injecting = false;
+    frozen = false;
+    pendingSteps = 0;
     if (mode == BotMode::Record || mode == BotMode::Play) {
         // Click Between Frames moves the player between ticks and changes how many ticks
         // run per frame: a recording made with it does not replay, and the analysis stops.
@@ -244,6 +249,8 @@ std::vector<std::string> Bot::listReplays() {
     if (!files) return names;
     for (auto const& path : files.unwrap()) {
         if (path.extension() == REPLAY_EXT) names.push_back(path.stem().string());
+        // Replays from other bots are listed with their extension.
+        else if (path.extension() == Gdr::EXTENSION) names.push_back(path.filename().string());
     }
     std::sort(names.begin(), names.end());
     return names;
@@ -284,6 +291,7 @@ void Bot::markSaved(std::string const& name) {
 
 Result<Replay> Bot::readReplay(std::string const& name) {
     if (!isValidName(name)) return Err("Invalid replay name");
+    if (name.ends_with(Gdr::EXTENSION)) return Gdr::read(replayDir() / name);
     auto data = file::readString(replayDir() / (name + REPLAY_EXT));
     if (!data) return Err(data.unwrapErr());
 
@@ -355,10 +363,18 @@ Result<> Bot::load(std::string const& name) {
     return Ok();
 }
 
+Result<size_t> Bot::exportGdr(std::string const& name) const {
+    if (!isValidName(name)) return Err("Name may only contain letters, digits, spaces, _ - .");
+    if (replay.inputs.empty()) return Err("Nothing to export");
+    if (auto res = file::createDirectoryAll(replayDir()); !res) return Err(res.unwrapErr());
+    return Gdr::write(replay, replayDir() / (name + Gdr::EXTENSION));
+}
+
 Result<> Bot::remove(std::string const& name) {
     if (!isValidName(name)) return Err("Invalid replay name");
     std::error_code ec;
-    std::filesystem::remove(replayDir() / (name + REPLAY_EXT), ec);
+    auto file = name.ends_with(Gdr::EXTENSION) ? replayDir() / name : replayDir() / (name + REPLAY_EXT);
+    std::filesystem::remove(file, ec);
     if (ec) return Err(ec.message());
     return Ok();
 }

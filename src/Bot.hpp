@@ -109,6 +109,13 @@ public:
     // Past / future / alternative trajectory lines.
     bool showPaths = true;
     bool playSounds = true;
+    // Mouse click sounds on every press and release during playback.
+    bool clickbot = false;
+    // On-screen frame advance / rewind controls while recording or playing.
+    bool frameControls = true;
+    // Frame advance: the level only moves by `pendingSteps` ticks at a time.
+    bool frozen = false;
+    int pendingSteps = 0;
     // Show and score CBF (fractional) windows instead of whole ticks.
     bool useCbf = true;
 
@@ -152,6 +159,8 @@ public:
     static std::vector<std::string> listReplays();
     geode::Result<> save(std::string const& name) const;
     void markSaved(std::string const& name);
+    // Writes <name>.gdr2 for other bots; returns how many inputs were rounded to a tick.
+    geode::Result<size_t> exportGdr(std::string const& name) const;
     geode::Result<> load(std::string const& name);
     // Reads a replay file without loading it.
     static geode::Result<Replay> readReplay(std::string const& name);

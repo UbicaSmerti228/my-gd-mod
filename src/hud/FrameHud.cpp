@@ -27,10 +27,22 @@ namespace {
     constexpr float COUNT_SCALE = 0.5f;
     constexpr float COUNT_PEAK_SCALE = 0.6f;
     constexpr float ROW_HEIGHT = 18.f;
+#ifdef GEODE_IS_MOBILE
+    // Phones redraw fewer segments: every other tick and a shorter look-ahead.
+    constexpr int TRACK_STEP = 2;
+    constexpr int TRAIL_TICKS = 240;
+    constexpr int FUTURE_TICKS = 360;
+    constexpr int FAN_BEHIND_TICKS = 60;
+    constexpr int FAN_AHEAD_TICKS = 180;
+    constexpr size_t FAN_POINT_STEP = 4;
+#else
+    constexpr int TRACK_STEP = 1;
     constexpr int TRAIL_TICKS = 360;
     constexpr int FUTURE_TICKS = 480;
     constexpr int FAN_BEHIND_TICKS = 120;
     constexpr int FAN_AHEAD_TICKS = 240;
+    constexpr size_t FAN_POINT_STEP = 2;
+#endif
     constexpr int HEAT_BUCKETS = 100;
     constexpr float HEAT_WIDTH = 220.f;
     constexpr float HEAT_HEIGHT = 5.f;
@@ -261,6 +273,7 @@ void FrameHud::onInputPlayed(size_t index) {
     m_lastIndex = static_cast<long>(index);
 
     auto const& input = replay.inputs[index];
+    if (Bot::get().clickbot) Sounds::playClick(input.down);
     if (input.down) {
         double now = m_layer->m_gameState.m_levelTime;
         m_pressTimes.push_back(now);
@@ -437,10 +450,10 @@ void FrameHud::drawTrajectories() {
     auto drawTrack = [&](int64_t from, int64_t to, bool dashed, ccColor4F color, bool p2) {
         from = std::max<int64_t>(from, 0);
         to = std::min<int64_t>(to, static_cast<int64_t>(track.size()) - 1);
-        for (int64_t t = from; t < to; ++t) {
-            if (dashed && (t / 3) % 2) continue;
+        for (int64_t t = from; t + TRACK_STEP <= to; t += TRACK_STEP) {
+            if (dashed && (t / (3 * TRACK_STEP)) % 2) continue;
             auto const& a = track[t];
-            auto const& b = track[t + 1];
+            auto const& b = track[t + TRACK_STEP];
             if (!a.valid || !b.valid) continue;
             auto pa = p2 ? a.p2 : a.p1;
             auto pb = p2 ? b.p2 : b.p1;
@@ -469,8 +482,8 @@ void FrameHud::drawTrajectories() {
         auto color = categoryColor(category);
         for (auto const& path : paths[i]) {
             auto lineColor = path.alive ? toColor4F(color, 0.45f) : ccColor4F { 1.f, 0.25f, 0.25f, 0.45f };
-            for (size_t k = 2; k < path.points.size(); k += 2) {
-                auto const& a = path.points[k - 2];
+            for (size_t k = FAN_POINT_STEP; k < path.points.size(); k += FAN_POINT_STEP) {
+                auto const& a = path.points[k - FAN_POINT_STEP];
                 auto const& b = path.points[k];
                 if (std::abs(b.x - a.x) > 60.f || std::abs(b.y - a.y) > 60.f) continue;
                 m_draw->drawSegment(a, b, 0.6f, lineColor);
