@@ -37,6 +37,9 @@ struct InputAnalysis {
     // Window width in fractional ticks when inputs can land between ticks (CBF),
     // 0 if it was not measured.
     float cbf = 0.f;
+    // Player x position at the input in the reference run, 0 if unknown. Used to map
+    // deaths and start positions of normal attempts to inputs.
+    float x = 0.f;
 
     int window() const { return left + right + 1; }
 };

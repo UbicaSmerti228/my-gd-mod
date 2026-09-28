@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <map>
 
 using namespace geode::prelude;
 
@@ -35,7 +34,11 @@ namespace {
         return a.button == b.button && a.player1 == b.player1;
     }
 
-    int s_stalledFrames = 0;
+    void sortByTick(std::vector<BotInput>& inputs) {
+        std::stable_sort(inputs.begin(), inputs.end(), [](auto const& a, auto const& b) {
+            return a.tick < b.tick;
+        });
+    }
 }
 
 Analyzer& Analyzer::get() {
@@ -45,24 +48,27 @@ Analyzer& Analyzer::get() {
 
 float Analyzer::progress() const {
     auto count = Bot::get().replay.inputs.size();
-    if (m_phase == Phase::Idle || m_phase == Phase::Starting || m_phase == Phase::Reference || count == 0) return 0.f;
+    if (m_phase != Phase::Advance && m_phase != Phase::Candidate) return 0.f;
+    if (count == 0) return 0.f;
     return static_cast<float>(m_input) / static_cast<float>(count);
 }
 
 std::string Analyzer::statusText() const {
     auto count = Bot::get().replay.inputs.size();
+    auto stage = m_optimize ? fmt::format("Optimize {}/2: ", m_stage) : std::string("Analysis: ");
     switch (m_phase) {
         case Phase::Idle: return "";
-        case Phase::Starting: return "Analysis: resume the game to start";
-        case Phase::Reference: return fmt::format("Analysis: reference run, tick {}", Bot::get().tick);
+        case Phase::Starting: return stage + "resume the game to start";
+        case Phase::Reference: return fmt::format("{}reference run, tick {}", stage, Bot::get().tick);
+        case Phase::Verify: return fmt::format("{}checking the optimized replay, tick {}", stage, Bot::get().tick);
         case Phase::Advance:
         case Phase::Candidate:
             if (m_refining) {
-                return fmt::format("Analysis: {:.1f}%  input {}/{}  CBF edge {:+.3f}",
-                    progress() * 100.f, m_input + 1, count, m_offsetF);
+                return fmt::format("{}{:.1f}%  input {}/{}  CBF edge {:+.3f}",
+                    stage, progress() * 100.f, m_input + 1, count, m_offsetF);
             }
-            return fmt::format("Analysis: {:.1f}%  input {}/{}  offset {:+d}",
-                progress() * 100.f, m_input + 1, count, m_offset);
+            return fmt::format("{}{:.1f}%  input {}/{}  offset {:+d}",
+                stage, progress() * 100.f, m_input + 1, count, m_offset);
     }
     return "";
 }
@@ -71,9 +77,9 @@ void Analyzer::clearPaths() {
     paths.clear();
 }
 
-Result<> Analyzer::start(PlayLayer* layer) {
+Result<> Analyzer::start(PlayLayer* layer, bool optimize) {
     auto& bot = Bot::get();
-    if (isActive()) return Err("Analysis is already running");
+    if (SimController::active()) return Err("Something is already running");
     if (!layer) return Err("Open the level first");
     if (bot.replay.inputs.empty()) return Err("Load or record a replay first");
     int levelID = layer->m_level ? layer->m_level->m_levelID.value() : 0;
@@ -86,12 +92,13 @@ Result<> Analyzer::start(PlayLayer* layer) {
     settleTicks = std::clamp(static_cast<int>(Mod::get()->getSavedValue<int64_t>("settle-ticks", 10)), 0, 240);
     measureCbf = Mod::get()->getSavedValue<bool>("cbf-analysis", true);
 
-    m_wasPractice = layer->m_isPracticeMode;
     bot.mode = BotMode::Play;
     bot.analyzing = true;
     bot.simInputs = bot.replay.inputs;
     paths.clear();
     m_results.clear();
+    m_optimize = optimize;
+    m_stage = 1;
     m_phase = Phase::Starting;
     return Ok();
 }
@@ -105,13 +112,9 @@ void Analyzer::drive(PlayLayer* layer, std::function<void(float)> const& step) {
     auto& bot = Bot::get();
 
     if (m_phase == Phase::Starting) {
-        if (!m_wasPractice) layer->togglePracticeMode(true);
-        if (auto engine = FMODAudioEngine::get(); engine && engine->m_globalChannel) {
-            engine->m_globalChannel->getVolume(&m_oldVolume);
-            engine->m_globalChannel->setVolume(0.f);
-        }
-        s_stalledFrames = 0;
-        beginReference(layer);
+        this->enterSimulation(layer);
+        m_stalledFrames = 0;
+        this->beginReference(layer);
     }
 
     auto deadline = std::chrono::steady_clock::now() + FRAME_BUDGET;
@@ -120,30 +123,23 @@ void Analyzer::drive(PlayLayer* layer, std::function<void(float)> const& step) {
     while (isActive() && std::chrono::steady_clock::now() < deadline) {
         if (m_restorePending) {
             m_restorePending = false;
-            this->restore(layer, m_restoreFrom);
+            restore(layer, m_restoreFrom);
             m_runDone = m_died = m_completed = m_converged = m_mismatch = false;
             continue;
         }
 
-        uint32_t before = bot.tick;
-        // One update must run exactly one physics tick, so the carried-over time is dropped.
-        layer->m_extraDelta = 0.0;
-        float warp = std::min(layer->m_gameState.m_timeWarp, 1.f);
-        if (!(warp > 0.f)) warp = 1.f;
-        step(warp / static_cast<float>(bot.replay.effectiveTps()));
-        uint32_t after = bot.tick;
-
-        if (after > before + 1) {
+        uint32_t ticks = stepOnce(layer, step);
+        if (ticks > 1) {
             return finish(layer, false, "The game ran several physics ticks in one update, analysis stopped");
         }
-        if (after == before) {
+        if (ticks == 0) {
             if (++idleSteps > MAX_IDLE_STEPS_PER_FRAME) break;
             continue;
         }
         idleSteps = 0;
         advanced = true;
 
-        if (m_phase == Phase::Advance && !m_runDone && after == m_target) {
+        if (m_phase == Phase::Advance && !m_runDone && bot.tick == m_target) {
             m_snapshot = layer->createCheckpoint();
             m_snapshotTick = m_target;
             m_hasSnapshot = true;
@@ -156,7 +152,7 @@ void Analyzer::drive(PlayLayer* layer, std::function<void(float)> const& step) {
         switch (m_phase) {
             case Phase::Reference: {
                 if (m_died) {
-                    return finish(layer, false, fmt::format("The replay dies at tick {}, analysis needs a replay that passes", bot.tick));
+                    return finish(layer, false, fmt::format("The replay dies at tick {}, analysis needs a replay that passes", m_deathTick));
                 }
                 auto count = bot.replay.inputs.size();
                 m_results.assign(count, {});
@@ -171,9 +167,12 @@ void Analyzer::drive(PlayLayer* layer, std::function<void(float)> const& step) {
             case Phase::Advance:
                 // Reaching the checkpoint tick is handled above; anything else means the
                 // replay did not reproduce between the reference and this run.
-                return finish(layer, false, fmt::format("The replay did not reproduce (died at tick {})", bot.tick));
+                return finish(layer, false, fmt::format("The replay did not reproduce (died at tick {})", m_deathTick));
             case Phase::Candidate:
                 this->finishCandidate(layer);
+                break;
+            case Phase::Verify:
+                this->finishVerify(layer);
                 break;
             default:
                 break;
@@ -182,19 +181,21 @@ void Analyzer::drive(PlayLayer* layer, std::function<void(float)> const& step) {
 
     if (!isActive()) return;
     if (advanced || m_restorePending) {
-        s_stalledFrames = 0;
+        m_stalledFrames = 0;
     }
-    else if (++s_stalledFrames > MAX_STALLED_FRAMES) {
+    else if (++m_stalledFrames > MAX_STALLED_FRAMES) {
         finish(layer, false, "The level stopped advancing, analysis stopped");
     }
 }
 
-void Analyzer::beginReference(PlayLayer* layer) {
+void Analyzer::beginReference(PlayLayer*) {
     auto& bot = Bot::get();
     bot.simInputs = bot.replay.inputs;
     m_phase = Phase::Reference;
     m_referenceEnd = bot.replay.lastTick() + 240;
     bot.track.assign(m_referenceEnd + 1, {});
+    m_hasSnapshot = false;
+    m_snapshot = nullptr;
     m_restoreFrom = nullptr;
     m_restorePending = true;
 }
@@ -269,9 +270,7 @@ void Analyzer::prepareInput(PlayLayer* layer) {
         if (tick < bot.track.size() && bot.track[tick].valid) break;
         ++m_input;
     }
-    if (m_input >= in.size()) {
-        return finish(layer, true, "Analysis finished");
-    }
+    if (m_input >= in.size()) return this->analysisDone(layer);
 
     uint32_t snapshot = snapshotTickFor(m_input);
     if (m_hasSnapshot && snapshot == m_snapshotTick) {
@@ -319,9 +318,7 @@ void Analyzer::beginCandidateAt(PlayLayer*, double offset) {
     moved.tick = static_cast<uint32_t>(std::max(0.0, whole));
     moved.subtick = static_cast<float>(time - whole);
     if (moved.subtick < 1e-4f) moved.subtick = 0.f;
-    std::stable_sort(bot.simInputs.begin(), bot.simInputs.end(), [](auto const& a, auto const& b) {
-        return a.tick < b.tick;
-    });
+    sortByTick(bot.simInputs);
 
     m_endTick = endTickFor(m_input, offset);
     m_path.clear();
@@ -461,66 +458,112 @@ void Analyzer::finishRefine(PlayLayer* layer, bool alive) {
     this->refineStep(layer);
 }
 
+void Analyzer::analysisDone(PlayLayer* layer) {
+    auto& bot = Bot::get();
+    // Remember where each input happens in the level: the forecast and the heatmap
+    // map deaths and start positions to inputs by x position.
+    for (size_t i = 0; i < m_results.size(); ++i) {
+        auto tick = bot.replay.inputs[i].tick;
+        if (tick < bot.track.size() && bot.track[tick].valid) m_results[i].x = bot.track[tick].p1.x;
+    }
+
+    if (!m_optimize || m_stage != 1) {
+        return finish(layer, true, m_optimize ? "Optimization finished" : "Analysis finished");
+    }
+
+    // Move every trustworthy input to the middle of its window.
+    m_shift.assign(m_results.size(), 0);
+    m_moved = 0;
+    for (size_t i = 0; i < m_results.size(); ++i) {
+        auto const& r = m_results[i];
+        if (!r.analyzed || r.unreliable || r.capped) continue;
+        int center = static_cast<int>(std::lround((r.right - r.left) / 2.0));
+        m_shift[i] = center;
+        if (center != 0) ++m_moved;
+    }
+    if (m_moved == 0) {
+        return finish(layer, true, "Every input is already in the middle of its window");
+    }
+    this->beginVerify(layer);
+}
+
+std::vector<BotInput> Analyzer::optimizedInputs() const {
+    auto inputs = Bot::get().replay.inputs;
+    for (size_t i = 0; i < inputs.size() && i < m_shift.size(); ++i) {
+        inputs[i].tick = static_cast<uint32_t>(std::max<int64_t>(0, static_cast<int64_t>(inputs[i].tick) + m_shift[i]));
+    }
+    sortByTick(inputs);
+    return inputs;
+}
+
+void Analyzer::beginVerify(PlayLayer*) {
+    auto& bot = Bot::get();
+    bot.simInputs = optimizedInputs();
+    m_phase = Phase::Verify;
+    m_referenceEnd = bot.simInputs.empty() ? 240 : bot.simInputs.back().tick + 240;
+    m_restoreFrom = nullptr;
+    m_restorePending = true;
+}
+
+void Analyzer::finishVerify(PlayLayer* layer) {
+    auto& bot = Bot::get();
+    if (!m_died) {
+        // The centered replay passes: make it the replay and measure it again.
+        size_t moved = 0;
+        for (int s : m_shift) moved += s != 0 ? 1 : 0;
+        bot.replay.inputs = optimizedInputs();
+        bot.replay.analysis.clear();
+        bot.replay.lstar.clear();
+        bot.replay.lstarShare.clear();
+        m_stage = 2;
+        Notification::create(fmt::format("{} inputs centered, measuring the new replay", moved), NotificationIcon::Info)->show();
+        return this->beginReference(layer);
+    }
+
+    // Undo the latest move at or before the death and try again.
+    auto const& in = bot.replay.inputs;
+    long undo = -1;
+    int64_t undoTick = -1;
+    for (size_t i = 0; i < in.size() && i < m_shift.size(); ++i) {
+        if (m_shift[i] == 0) continue;
+        int64_t tick = static_cast<int64_t>(in[i].tick) + m_shift[i];
+        if (tick <= static_cast<int64_t>(m_deathTick) && tick >= undoTick) {
+            undoTick = tick;
+            undo = static_cast<long>(i);
+        }
+    }
+    if (undo < 0) {
+        return finish(layer, true, "The centered replay does not pass; kept the original analysis");
+    }
+    m_shift[undo] = 0;
+    this->beginVerify(layer);
+}
+
 void Analyzer::finish(PlayLayer* layer, bool keepResults, std::string const& message) {
     auto& bot = Bot::get();
-    bot.analyzing = false;
-    bot.simInputs.clear();
-    bool wasRunning = m_phase != Phase::Starting;
     m_phase = Phase::Idle;
     m_snapshot = nullptr;
     m_hasSnapshot = false;
     m_restorePending = false;
     m_restoreFrom = nullptr;
-
-    if (layer) {
-        layer->m_checkpointArray->removeAllObjects();
-        if (wasRunning && !m_wasPractice) layer->togglePracticeMode(false);
-        layer->resetLevel();
-    }
-    if (wasRunning) {
-        if (auto engine = FMODAudioEngine::get(); engine && engine->m_globalChannel) {
-            engine->m_globalChannel->setVolume(m_oldVolume);
-        }
-    }
+    this->leaveSimulation(layer);
 
     size_t unreliable = 0;
-    if (keepResults) {
+    if (keepResults && m_results.size() == bot.replay.inputs.size()) {
         bot.replay.analysis = m_results;
         for (auto const& r : m_results) unreliable += r.unreliable ? 1 : 0;
         LStar::computeAsync();
     }
-    else {
+    else if (!keepResults) {
         paths.clear();
     }
     m_results.clear();
+    m_shift.clear();
 
     auto text = unreliable
         ? fmt::format("{} ({} inputs could not be reproduced and were skipped)", message, unreliable)
         : message;
     Notification::create(text, keepResults ? NotificationIcon::Success : NotificationIcon::Warning, 4.f)->show();
-}
-
-void Analyzer::restore(PlayLayer* layer, CheckpointObject* checkpoint) {
-    Bot::get().injecting = false;
-    layer->m_checkpointArray->removeAllObjects();
-    if (checkpoint) layer->m_checkpointArray->addObject(checkpoint);
-    layer->resetLevel();
-}
-
-void Analyzer::onReset(GJBaseGameLayer* layer) {
-    // Buttons held across the checkpoint are pressed again, like holding through a respawn.
-    auto& bot = Bot::get();
-    std::map<std::pair<uint8_t, bool>, bool> held;
-    for (auto const& i : bot.simInputs) {
-        if (i.tick >= bot.tick) break;
-        held[{ i.button, i.player1 }] = i.down;
-    }
-    for (auto const& [key, isDown] : held) {
-        if (!isDown) continue;
-        bot.injecting = true;
-        layer->handleButton(true, key.first, key.second);
-        bot.injecting = false;
-    }
 }
 
 bool Analyzer::movedPlayerIsP2(GJBaseGameLayer* layer) const {
@@ -533,6 +576,10 @@ void Analyzer::onTickEnd(GJBaseGameLayer* layer, uint32_t tick) {
     switch (m_phase) {
         case Phase::Reference: {
             if (tick < bot.track.size()) bot.track[tick] = Bot::captureState(layer);
+            if (tick >= m_referenceEnd) m_runDone = true;
+            break;
+        }
+        case Phase::Verify: {
             if (tick >= m_referenceEnd) m_runDone = true;
             break;
         }
@@ -567,6 +614,7 @@ void Analyzer::onDeath() {
     if (m_phase == Phase::Idle || m_phase == Phase::Starting) return;
     m_died = true;
     m_runDone = true;
+    m_deathTick = Bot::get().tick;
 }
 
 void Analyzer::onComplete() {

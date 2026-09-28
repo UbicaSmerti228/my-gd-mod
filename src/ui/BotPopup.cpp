@@ -1,6 +1,7 @@
 #include "BotPopup.hpp"
 #include "../analysis/Analyzer.hpp"
 #include "../analysis/LStar.hpp"
+#include "../sim/RouteFinder.hpp"
 
 #include <Geode/ui/SliderNode.hpp>
 #include <fmt/format.h>
@@ -9,7 +10,7 @@ using namespace geode::prelude;
 
 namespace {
     constexpr float WIDTH = 400.f;
-    constexpr float HEIGHT = 320.f;
+    constexpr float HEIGHT = 350.f;
     constexpr float LIST_WIDTH = 180.f;
     constexpr float LIST_HEIGHT = 108.f;
 
@@ -63,17 +64,17 @@ bool BotPopup::init() {
     m_mainLayer->addChildAtPosition(m_infoLabel, Anchor::Top, { 0.f, -100.f });
 
     // Left column: saved replays
-    m_mainLayer->addChildAtPosition(makeCaption("Saved replays"), Anchor::BottomLeft, { 110.f, 178.f });
+    m_mainLayer->addChildAtPosition(makeCaption("Saved replays"), Anchor::BottomLeft, { 110.f, 208.f });
     auto listPanel = makePanel({ LIST_WIDTH + 10.f, LIST_HEIGHT + 8.f });
-    m_mainLayer->addChildAtPosition(listPanel, Anchor::BottomLeft, { 110.f, 110.f });
+    m_mainLayer->addChildAtPosition(listPanel, Anchor::BottomLeft, { 110.f, 140.f });
     m_list = ScrollLayer::create({ LIST_WIDTH, LIST_HEIGHT });
     m_list->m_contentLayer->setLayout(ScrollLayer::createDefaultListLayout(2.f));
-    m_list->setPosition({ 110.f - LIST_WIDTH / 2.f, 110.f - LIST_HEIGHT / 2.f });
+    m_list->setPosition({ 110.f - LIST_WIDTH / 2.f, 140.f - LIST_HEIGHT / 2.f });
     m_mainLayer->addChild(m_list);
 
     // Right column: save, speed, analysis
     auto rightX = 300.f;
-    m_mainLayer->addChildAtPosition(makeCaption("Save current"), Anchor::BottomLeft, { rightX, 178.f });
+    m_mainLayer->addChildAtPosition(makeCaption("Save current"), Anchor::BottomLeft, { rightX, 208.f });
 
     m_nameInput = TextInput::create(150.f, "replay name");
     m_nameInput->setFilter("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-.");
@@ -82,7 +83,7 @@ bool BotPopup::init() {
     if (auto pl = PlayLayer::get(); pl && pl->m_level) {
         m_nameInput->setString(pl->m_level->m_levelName.c_str());
     }
-    m_mainLayer->addChildAtPosition(m_nameInput, Anchor::BottomLeft, { rightX, 154.f });
+    m_mainLayer->addChildAtPosition(m_nameInput, Anchor::BottomLeft, { rightX, 184.f });
 
     auto saveBtn = CCMenuItemExt::createSpriteExtra(
         ButtonSprite::create("Save", 80, 0, 0.7f, true, "bigFont.fnt", "GJ_button_01.png", 26.f),
@@ -94,11 +95,11 @@ bool BotPopup::init() {
             this->refreshList();
         }
     );
-    m_buttonMenu->addChildAtPosition(saveBtn, Anchor::BottomLeft, { rightX, 126.f });
+    m_buttonMenu->addChildAtPosition(saveBtn, Anchor::BottomLeft, { rightX, 156.f });
 
     m_speedLabel = CCLabelBMFont::create("", "bigFont.fnt");
     m_speedLabel->setScale(0.4f);
-    m_mainLayer->addChildAtPosition(m_speedLabel, Anchor::BottomLeft, { rightX, 102.f });
+    m_mainLayer->addChildAtPosition(m_speedLabel, Anchor::BottomLeft, { rightX, 132.f });
 
     auto slider = SliderNode::create([this](SliderNode*, float value) {
         Bot::get().setSpeed(value);
@@ -109,28 +110,46 @@ bool BotPopup::init() {
     slider->setSnapStep(0.05f);
     slider->setValue(Bot::get().speed);
     slider->setScale(0.7f);
-    m_mainLayer->addChildAtPosition(slider, Anchor::BottomLeft, { rightX, 84.f });
+    m_mainLayer->addChildAtPosition(slider, Anchor::BottomLeft, { rightX, 114.f });
     m_speedLabel->setString(fmt::format("Speed x{:.2f}", Bot::get().speed).c_str());
 
-    bool analyzing = Analyzer::get().isActive();
-    auto analyzeBtn = CCMenuItemExt::createSpriteExtra(
-        ButtonSprite::create(
-            analyzing ? "Stop analysis" : "Analyze windows", 150, 0, 0.5f, true, "bigFont.fnt",
-            analyzing ? "GJ_button_06.png" : "GJ_button_03.png", 28.f
-        ),
-        [this](CCMenuItemSpriteExtra*) {
-            auto& analyzer = Analyzer::get();
-            if (analyzer.isActive()) {
-                analyzer.cancel(PlayLayer::get());
-                return this->onClose(nullptr);
+    // Actions: analyze, optimize (center every input in its window), find a route
+    struct Action { char const* label; char const* texture; int kind; };
+    Action actions[] = {
+        { "Analyze", "GJ_button_03.png", 0 },
+        { "Optimize", "GJ_button_02.png", 1 },
+        { "Find route", "GJ_button_05.png", 2 },
+    };
+    auto running = SimController::active();
+    float ax = 70.f;
+    for (auto const& action : actions) {
+        bool isRunning = running && (
+            (action.kind == 2 && running == &RouteFinder::get()) ||
+            (action.kind != 2 && running == &Analyzer::get())
+        );
+        auto kind = action.kind;
+        auto button = CCMenuItemExt::createSpriteExtra(
+            ButtonSprite::create(
+                isRunning ? "Stop" : action.label, 110, 0, 0.5f, true, "bigFont.fnt",
+                isRunning ? "GJ_button_06.png" : action.texture, 28.f
+            ),
+            [this, kind](CCMenuItemSpriteExtra*) {
+                if (auto sim = SimController::active()) {
+                    sim->cancel(PlayLayer::get());
+                    return this->onClose(nullptr);
+                }
+                auto res = kind == 2 ? RouteFinder::get().start(PlayLayer::get())
+                    : Analyzer::get().start(PlayLayer::get(), kind == 1);
+                if (!res) return this->notify(res.unwrapErr(), false);
+                this->notify(kind == 2
+                    ? "Resume the game: the route search plays the level by itself (can take a long time)"
+                    : "Resume the game: the analysis runs in the level (may take a few minutes)", true);
+                this->onClose(nullptr);
             }
-            auto res = analyzer.start(PlayLayer::get());
-            if (!res) return this->notify(res.unwrapErr(), false);
-            this->notify("Resume the game: the analysis runs in the level (may take a few minutes)", true);
-            this->onClose(nullptr);
-        }
-    );
-    m_buttonMenu->addChildAtPosition(analyzeBtn, Anchor::BottomLeft, { rightX, 54.f });
+        );
+        m_buttonMenu->addChildAtPosition(button, Anchor::BottomLeft, { ax, 58.f });
+        ax += 130.f;
+    }
 
     // Bottom row: display toggles and the replay folder
     struct Toggle { char const* label; char const* key; bool Bot::* field; };
@@ -247,8 +266,8 @@ void BotPopup::refreshInfo() {
     auto tps = replay.tps ? fmt::format("{} TPS", replay.tps) : std::string("TPS not measured yet");
 
     std::string analysis;
-    if (Analyzer::get().isActive()) {
-        analysis = Analyzer::get().statusText();
+    if (auto sim = SimController::active()) {
+        analysis = sim->statusText();
     }
     else if (replay.hasAnalysis()) {
         size_t counted = 0, unreliable = 0;

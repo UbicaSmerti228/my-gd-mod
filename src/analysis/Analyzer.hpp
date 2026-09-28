@@ -1,10 +1,9 @@
 #pragma once
 
-#include "../Bot.hpp"
+#include "../sim/SimController.hpp"
 
 #include <Geode/Geode.hpp>
 
-#include <functional>
 #include <string>
 #include <vector>
 
@@ -24,7 +23,14 @@ struct TrajectoryPath {
 // earlier. Before searching, the unshifted input is replayed from the same
 // checkpoint: if that does not reproduce the reference run exactly, the result
 // for that input is marked unreliable instead of being trusted.
-class Analyzer {
+//
+// With CBF measurement on, each window edge is then bisected to 1/16 tick by placing
+// the input between ticks.
+//
+// In optimize mode, after the analysis every input is moved to the middle of its
+// window, the new replay is checked from the start (moves that break it are undone),
+// and the result is analyzed again.
+class Analyzer : public SimController {
 public:
     static Analyzer& get();
 
@@ -35,50 +41,49 @@ public:
     // Also measure fractional (Click Between Frames) windows.
     bool measureCbf = true;
 
-    bool isActive() const { return m_phase != Phase::Idle; }
+    bool isActive() const override { return m_phase != Phase::Idle; }
+    std::string statusText() const override;
     float progress() const;
-    std::string statusText() const;
 
     // Alternative trajectories found for each input, parallel to the replay inputs.
     std::vector<std::vector<TrajectoryPath>> paths;
     void clearPaths();
 
-    geode::Result<> start(PlayLayer* layer);
-    void cancel(PlayLayer* layer);
+    geode::Result<> start(PlayLayer* layer, bool optimize);
+    void cancel(PlayLayer* layer) override;
 
-    // Called instead of the normal game update while active; `step` runs one
-    // original GJBaseGameLayer::update.
-    void drive(PlayLayer* layer, std::function<void(float)> const& step);
-
-    void onTickEnd(GJBaseGameLayer* layer, uint32_t tick);
-    void onReset(GJBaseGameLayer* layer);
-    void onDeath();
-    void onComplete();
+    void drive(PlayLayer* layer, std::function<void(float)> const& step) override;
+    void onTickEnd(GJBaseGameLayer* layer, uint32_t tick) override;
+    void onDeath() override;
+    void onComplete() override;
 
 private:
     Analyzer() = default;
 
-    enum class Phase { Idle, Starting, Reference, Advance, Candidate };
+    enum class Phase { Idle, Starting, Reference, Advance, Candidate, Verify };
 
     void beginReference(PlayLayer* layer);
     void prepareInput(PlayLayer* layer);
     void beginAdvance(PlayLayer* layer, uint32_t target);
     void beginCandidate(PlayLayer* layer, int offset);
     void beginCandidateAt(PlayLayer* layer, double offset);
+    void finishCandidate(PlayLayer* layer);
+    void finishInput(PlayLayer* layer);
+    void completeInput(PlayLayer* layer);
+    void nextOffset(PlayLayer* layer);
     void startRefine(PlayLayer* layer);
     void refineStep(PlayLayer* layer);
     void finishRefine(PlayLayer* layer, bool alive);
-    void completeInput(PlayLayer* layer);
-    void finishCandidate(PlayLayer* layer);
-    void finishInput(PlayLayer* layer);
-    void nextOffset(PlayLayer* layer);
+    void analysisDone(PlayLayer* layer);
+    void beginVerify(PlayLayer* layer);
+    void finishVerify(PlayLayer* layer);
     void finish(PlayLayer* layer, bool keepResults, std::string const& message);
 
-    void restore(PlayLayer* layer, CheckpointObject* checkpoint);
     bool offsetAllowed(int offset) const;
     uint32_t snapshotTickFor(size_t index) const;
     uint32_t endTickFor(size_t index, double offset) const;
     bool movedPlayerIsP2(GJBaseGameLayer* layer) const;
+    std::vector<BotInput> optimizedInputs() const;
 
     Phase m_phase = Phase::Idle;
     size_t m_input = 0;
@@ -97,11 +102,16 @@ private:
     bool m_completed = false;
     bool m_converged = false;
     bool m_mismatch = false;
+    uint32_t m_deathTick = 0;
     int m_offset = 0;
     double m_offsetF = 0.0;
     int m_direction = 0;
     bool m_rightDeath = false;
     bool m_leftDeath = false;
+    uint32_t m_endTick = 0;
+    uint32_t m_referenceEnd = 0;
+    std::vector<cocos2d::CCPoint> m_path;
+    int m_stalledFrames = 0;
 
     // CBF refinement: bisecting the fractional position of one window edge.
     bool m_refining = false;
@@ -111,10 +121,10 @@ private:
     double m_refineDead = 0.0;
     double m_rightEdge = 0.0;
     double m_leftEdge = 0.0;
-    uint32_t m_endTick = 0;
-    uint32_t m_referenceEnd = 0;
-    std::vector<cocos2d::CCPoint> m_path;
 
-    bool m_wasPractice = false;
-    float m_oldVolume = 1.f;
+    // Optimizer
+    bool m_optimize = false;
+    int m_stage = 1;
+    std::vector<int> m_shift;
+    size_t m_moved = 0;
 };

@@ -32,7 +32,10 @@ protected:
     void refreshPrecision();
     void spawnMarker(size_t index, int category);
     void drawTrajectories();
+    void updateForecast(float dt);
+    void drawHeatmap(double precision);
     bool active() const;
+    bool hasLevelAnalysis() const;
 
     PlayLayer* m_layer = nullptr;
     cocos2d::CCNode* m_counter = nullptr;
@@ -42,6 +45,12 @@ protected:
     cocos2d::CCLabelBMFont* m_lstarLabel = nullptr;
     cocos2d::CCLabelBMFont* m_cpsLabel = nullptr;
     geode::Ref<cocos2d::CCDrawNode> m_draw;
+    cocos2d::CCDrawNode* m_heat = nullptr;
+    cocos2d::CCLayerColor* m_heatMarker = nullptr;
+    cocos2d::CCLabelBMFont* m_forecastLabel = nullptr;
+    double m_heatPrecision = -1.0;
+    float m_maxX = 0.f;
+    float m_forecastTimer = 0.f;
     geode::Ref<cocos2d::CCNode> m_markers;
 
     long m_lastIndex = -1;

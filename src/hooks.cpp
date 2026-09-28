@@ -1,5 +1,7 @@
 #include "Bot.hpp"
 #include "analysis/Analyzer.hpp"
+#include "sim/SimController.hpp"
+#include "stats/Forecast.hpp"
 #include "hud/FrameHud.hpp"
 #include "ui/BotPopup.hpp"
 
@@ -17,6 +19,12 @@ namespace {
     bool isBotLayer(GJBaseGameLayer* layer) {
         auto pl = PlayLayer::get();
         return pl && static_cast<GJBaseGameLayer*>(pl) == layer;
+    }
+
+    // Attempts that count for the personal forecast: the player's own, in normal mode
+    // (from the start or a start position). Practice is only used to build macros.
+    bool isHumanAttempt(PlayLayer* layer) {
+        return Bot::get().mode == BotMode::Off && !SimController::active() && !layer->m_isPracticeMode;
     }
 
     // With the bot in use nothing gets saved: no stars, no new best, no completion.
@@ -48,9 +56,9 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
     }
 
     void update(float dt) {
-        auto& analyzer = Analyzer::get();
-        if (isBotLayer(this) && analyzer.isActive()) {
-            analyzer.drive(static_cast<PlayLayer*>(static_cast<GJBaseGameLayer*>(this)), [this](float step) {
+        auto sim = SimController::active();
+        if (sim && isBotLayer(this)) {
+            sim->drive(static_cast<PlayLayer*>(static_cast<GJBaseGameLayer*>(this)), [this](float step) {
                 GJBaseGameLayer::update(step);
             });
             return;
@@ -108,6 +116,7 @@ class $modify(BotPlayLayer, PlayLayer) {
         bot.onReset(this);
         if (auto hud = m_fields->hud) hud->resetTo(bot.tick);
         applySafeMode(this);
+        if (isHumanAttempt(this)) Forecast::onAttemptStart(this);
     }
 
     CheckpointObject* createCheckpoint() {
@@ -127,25 +136,28 @@ class $modify(BotPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
-        if (Analyzer::get().isActive()) {
-            // Reaching the end during analysis counts as surviving; the level is not finished.
-            return Analyzer::get().onComplete();
+        if (auto sim = SimController::active()) {
+            // Reaching the end during a simulation counts as surviving; the level is not finished.
+            return sim->onComplete();
         }
+        if (isHumanAttempt(this)) Forecast::onAttemptEnd(this, 1);
         applySafeMode(this);
         PlayLayer::levelComplete();
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
         // The anti-cheat spike always goes through to the game.
-        if (Analyzer::get().isActive() && object != m_anticheatSpike) {
-            return Analyzer::get().onDeath();
+        if (object != m_anticheatSpike) {
+            if (auto sim = SimController::active()) return sim->onDeath();
+            if (isHumanAttempt(this)) Forecast::onAttemptEnd(this, 0);
         }
         applySafeMode(this);
         PlayLayer::destroyPlayer(player, object);
     }
 
     void onQuit() {
-        Analyzer::get().cancel(nullptr);
+        if (auto sim = SimController::active()) sim->cancel(nullptr);
+        if (isHumanAttempt(this)) Forecast::onAttemptEnd(this, 2);
         // Leave the rest of the game at normal speed and pitch.
         if (auto engine = FMODAudioEngine::get(); engine && engine->m_globalChannel) {
             engine->m_globalChannel->setPitch(1.f);
@@ -157,11 +169,10 @@ class $modify(BotPlayLayer, PlayLayer) {
         auto label = m_fields->overlay;
         if (!label) return;
         auto& bot = Bot::get();
-        auto& analyzer = Analyzer::get();
 
-        if (analyzer.isActive()) {
+        if (auto sim = SimController::active()) {
             label->setVisible(true);
-            label->setString(analyzer.statusText().c_str());
+            label->setString(sim->statusText().c_str());
             label->setColor({ 255, 220, 90 });
             return;
         }
@@ -309,7 +320,7 @@ class $modify(BotPlayerObject, PlayerObject) {
 class $modify(BotScheduler, CCScheduler) {
     void update(float dt) {
         auto& bot = Bot::get();
-        if (bot.speed != 1.f && PlayLayer::get() && !Analyzer::get().isActive()) dt *= bot.speed;
+        if (bot.speed != 1.f && PlayLayer::get() && !SimController::active()) dt *= bot.speed;
         CCScheduler::update(dt);
     }
 };

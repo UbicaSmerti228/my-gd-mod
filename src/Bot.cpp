@@ -1,5 +1,6 @@
 #include "Bot.hpp"
 #include "analysis/Analyzer.hpp"
+#include "sim/SimController.hpp"
 #include "analysis/LStar.hpp"
 
 #include <algorithm>
@@ -11,7 +12,7 @@ using namespace geode::prelude;
 
 namespace {
     constexpr char const* REPLAY_MAGIC = "ILR";
-    constexpr int REPLAY_VERSION = 3;
+    constexpr int REPLAY_VERSION = 4;
     constexpr char const* REPLAY_EXT = ".ilr";
 
     bool isValidName(std::string const& name) {
@@ -111,7 +112,9 @@ void Bot::onReset(GJBaseGameLayer* layer) {
             in.begin(), in.end(), tick,
             [](BotInput const& i, uint32_t t) { return i.tick < t; }
         ) - in.begin();
-        if (analyzing) Analyzer::get().onReset(layer);
+        if (analyzing) {
+            if (auto sim = SimController::active()) sim->onReset(layer);
+        }
     }
 }
 
@@ -141,7 +144,7 @@ void Bot::onTickStart(GJBaseGameLayer* layer) {
 
 void Bot::onTickEnd(GJBaseGameLayer* layer) {
     if (analyzing) {
-        Analyzer::get().onTickEnd(layer, tick);
+        if (auto sim = SimController::active()) sim->onTickEnd(layer, tick);
     }
     else if (mode == BotMode::Play) {
         if (track.size() <= tick) track.resize(tick + 1);
@@ -204,7 +207,7 @@ Result<> Bot::save(std::string const& name) const {
         out << "analysis " << replay.analysis.size() << '\n';
         for (auto const& a : replay.analysis) {
             int flags = (a.analyzed ? 1 : 0) | (a.capped ? 2 : 0) | (a.unreliable ? 4 : 0);
-            out << a.left << ' ' << a.right << ' ' << flags << ' ' << a.cbf << '\n';
+            out << a.left << ' ' << a.right << ' ' << flags << ' ' << a.cbf << ' ' << a.x << '\n';
         }
     }
     // The level name goes last since it may contain spaces.
@@ -249,6 +252,7 @@ Result<> Bot::load(std::string const& name) {
                 int flags = 0;
                 if (!(in >> a.left >> a.right >> flags)) return Err("Corrupted replay (analysis list)");
                 if (version >= 3 && !(in >> a.cbf)) return Err("Corrupted replay (analysis list)");
+                if (version >= 4 && !(in >> a.x)) return Err("Corrupted replay (analysis list)");
                 a.analyzed = flags & 1;
                 a.capped = flags & 2;
                 a.unreliable = flags & 4;

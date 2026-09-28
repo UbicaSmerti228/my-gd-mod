@@ -2,6 +2,8 @@
 #include "Sounds.hpp"
 #include "../analysis/Analyzer.hpp"
 #include "../analysis/LStar.hpp"
+#include "../sim/SimController.hpp"
+#include "../stats/Forecast.hpp"
 
 #include <cmath>
 
@@ -29,6 +31,25 @@ namespace {
     constexpr int FUTURE_TICKS = 480;
     constexpr int FAN_BEHIND_TICKS = 120;
     constexpr int FAN_AHEAD_TICKS = 240;
+    constexpr int HEAT_BUCKETS = 100;
+    constexpr float HEAT_WIDTH = 220.f;
+    constexpr float HEAT_HEIGHT = 5.f;
+
+    std::string formatDuration(double seconds) {
+        if (!std::isfinite(seconds) || seconds > 3.15e8) return "practically never";
+        if (seconds < 3600.0) return fmt::format("{:.0f} min", std::max(1.0, seconds / 60.0));
+        if (seconds < 48 * 3600.0) return fmt::format("{:.1f} h", seconds / 3600.0);
+        if (seconds < 365 * 86400.0) return fmt::format("{:.1f} days", seconds / 86400.0);
+        return fmt::format("{:.1f} years", seconds / (365 * 86400.0));
+    }
+
+    std::string formatCount(double count) {
+        if (!std::isfinite(count) || count > 1e12) return "more than a trillion";
+        if (count < 1e4) return fmt::format("{:.0f}", count);
+        if (count < 1e6) return fmt::format("{:.1f}k", count / 1e3);
+        if (count < 1e9) return fmt::format("{:.1f}M", count / 1e6);
+        return fmt::format("{:.1f}B", count / 1e9);
+    }
 
     ccColor4F toColor4F(ccColor3B c, float alpha) {
         return { c.r / 255.f, c.g / 255.f, c.b / 255.f, alpha };
@@ -109,6 +130,21 @@ bool FrameHud::init(PlayLayer* layer) {
         objects->addChild(m_markers, 1001);
     }
 
+    // Difficulty heatmap under the progress bar, and the forecast line.
+    m_heat = CCDrawNode::create();
+    m_heat->setPosition({ (winSize.width - HEAT_WIDTH) / 2.f, winSize.height - 24.f });
+    this->addChild(m_heat);
+    m_heatMarker = CCLayerColor::create({ 255, 255, 255, 230 }, 1.5f, HEAT_HEIGHT + 4.f);
+    m_heatMarker->ignoreAnchorPointForPosition(false);
+    m_heatMarker->setAnchorPoint({ 0.5f, 0.f });
+    m_heat->addChild(m_heatMarker);
+
+    m_forecastLabel = CCLabelBMFont::create("", "bigFont.fnt");
+    m_forecastLabel->setScale(0.3f);
+    m_forecastLabel->setOpacity(220);
+    m_forecastLabel->setPosition({ winSize.width / 2.f, 12.f });
+    this->addChild(m_forecastLabel);
+
     this->scheduleUpdate();
     this->resetTo(0);
     return true;
@@ -147,7 +183,13 @@ void FrameHud::buildCounter() {
 
 bool FrameHud::active() const {
     auto& bot = Bot::get();
-    return bot.mode == BotMode::Play && !bot.analyzing && !Analyzer::get().isActive();
+    return bot.mode == BotMode::Play && !bot.analyzing && !SimController::active();
+}
+
+bool FrameHud::hasLevelAnalysis() const {
+    auto const& replay = Bot::get().replay;
+    int levelID = m_layer->m_level ? m_layer->m_level->m_levelID.value() : 0;
+    return replay.hasAnalysis() && (!replay.levelID || !levelID || replay.levelID == levelID);
 }
 
 void FrameHud::resetTo(uint32_t tick) {
@@ -283,7 +325,7 @@ void FrameHud::spawnMarker(size_t index, int category) {
     m_markers->addChild(marker);
 }
 
-void FrameHud::update(float) {
+void FrameHud::update(float dt) {
     auto& bot = Bot::get();
     bool show = active() && bot.replay.hasAnalysis() && bot.showCounter;
     m_counter->setVisible(show);
@@ -301,6 +343,83 @@ void FrameHud::update(float) {
     if (show && LStar::isComputing()) this->refreshPrecision();
 
     this->drawTrajectories();
+    this->updateForecast(dt);
+}
+
+void FrameHud::updateForecast(float dt) {
+    auto& bot = Bot::get();
+    bool visible = bot.showCounter && !SimController::active() && hasLevelAnalysis();
+    m_heat->setVisible(visible);
+    m_forecastLabel->setVisible(visible && bot.mode == BotMode::Off);
+    if (!visible) return;
+
+    if (m_maxX > 0.f && m_layer->m_player1) {
+        float ratio = std::clamp(m_layer->m_player1->getPositionX() / m_maxX, 0.f, 1.f);
+        m_heatMarker->setPosition({ ratio * HEAT_WIDTH, -2.f });
+    }
+
+    m_forecastTimer -= dt;
+    if (m_forecastTimer > 0.f) return;
+    m_forecastTimer = 1.f;
+
+    // The player's own precision when there is enough data, else the level's L*.
+    auto const& estimate = Forecast::estimate();
+    auto const& replay = bot.replay;
+    double precision = estimate.valid ? estimate.precision
+        : !replay.lstar.empty() ? replay.lstar.back() : 0.0;
+    if (precision > 0.0 && std::abs(precision - m_heatPrecision) > 1e-9) this->drawHeatmap(precision);
+
+    if (estimate.valid) {
+        m_forecastLabel->setString(fmt::format(
+            "Your L {:.1f}  |  {} attempts, {} deaths  |  beat in ~{} ({} full runs)",
+            estimate.precision, estimate.attempts, estimate.deaths,
+            formatDuration(estimate.expectedSeconds), formatCount(estimate.expectedAttempts)
+        ).c_str());
+    }
+    else {
+        m_forecastLabel->setString(fmt::format(
+            "Forecast: {} attempts, {} deaths logged (needs 5 attempts and 3 deaths)",
+            estimate.attempts, estimate.deaths
+        ).c_str());
+    }
+}
+
+void FrameHud::drawHeatmap(double precision) {
+    m_heatPrecision = precision;
+    m_heat->clear();
+
+    auto const& replay = Bot::get().replay;
+    m_maxX = 0.f;
+    for (auto const& a : replay.analysis) m_maxX = std::max(m_maxX, a.x);
+    if (m_maxX <= 0.f) return;
+
+    // Chance to die in each slice of the level at this precision.
+    auto miss = Forecast::missChances(precision);
+    std::array<double, HEAT_BUCKETS> survive;
+    survive.fill(1.0);
+    for (size_t i = 0; i < miss.size(); ++i) {
+        float x = replay.analysis[i].x;
+        if (x <= 0.f || miss[i] <= 0.0) continue;
+        int bucket = std::clamp(static_cast<int>(x / m_maxX * HEAT_BUCKETS), 0, HEAT_BUCKETS - 1);
+        survive[bucket] *= 1.0 - miss[i];
+    }
+    double worst = 0.0;
+    for (double s : survive) worst = std::max(worst, 1.0 - s);
+
+    float slice = HEAT_WIDTH / HEAT_BUCKETS;
+    CCPoint frame[4] = { { -1.f, -1.f }, { HEAT_WIDTH + 1.f, -1.f }, { HEAT_WIDTH + 1.f, HEAT_HEIGHT + 1.f }, { -1.f, HEAT_HEIGHT + 1.f } };
+    m_heat->drawPolygon(frame, 4, { 0.f, 0.f, 0.f, 0.6f }, 0.f, { 0.f, 0.f, 0.f, 0.f });
+    for (int b = 0; b < HEAT_BUCKETS; ++b) {
+        double risk = 1.0 - survive[b];
+        // Relative to the hardest slice: green (easy) -> yellow -> red (the wall).
+        float t = worst > 0.0 ? static_cast<float>(std::sqrt(risk / worst)) : 0.f;
+        ccColor4F color = t < 0.5f
+            ? ccColor4F { 0.25f + 1.5f * t, 0.85f, 0.3f, 0.95f }
+            : ccColor4F { 1.f, 0.85f - 1.3f * (t - 0.5f), 0.3f - 0.4f * (t - 0.5f), 0.95f };
+        float x0 = b * slice;
+        CCPoint rect[4] = { { x0, 0.f }, { x0 + slice, 0.f }, { x0 + slice, HEAT_HEIGHT }, { x0, HEAT_HEIGHT } };
+        m_heat->drawPolygon(rect, 4, color, 0.f, { 0.f, 0.f, 0.f, 0.f });
+    }
 }
 
 void FrameHud::drawTrajectories() {
