@@ -1,5 +1,6 @@
 #include "BotPopup.hpp"
 
+#include <Geode/ui/SliderNode.hpp>
 #include <fmt/format.h>
 
 using namespace geode::prelude;
