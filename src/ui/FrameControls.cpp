@@ -160,7 +160,7 @@ void FrameControls::onLevelReset() {
     while (!m_history.empty() && m_history.back().first > tick) m_history.pop_back();
 }
 
-bool FrameControls::hitsTouch(CCTouch* touch) const {
+bool FrameControls::hitsTouch(CCTouch* touch) {
     if (!this->isVisible() || !touch) return false;
     auto location = touch->getLocation();
     for (auto item : CCArrayExt<CCNode*>(m_menu->getChildren())) {

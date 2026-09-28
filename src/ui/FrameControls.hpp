@@ -22,7 +22,7 @@ public:
     void afterUpdate();
     void onLevelReset();
     // Whether a touch lands on one of the buttons (so it must not count as a jump).
-    bool hitsTouch(cocos2d::CCTouch* touch) const;
+    bool hitsTouch(cocos2d::CCTouch* touch);
 
     void update(float dt) override;
     ~FrameControls() override;

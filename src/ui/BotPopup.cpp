@@ -533,6 +533,8 @@ void BotPopup::showHelp() {
         "then Save.\n"
         "<cg>Showcase</c>: load a replay, pick Play, press Start.\n"
         "<cg>CBF mode</c>: turn on if you play with Click Between Frames.\n"
+        "<cg>Frame controls</c> (right side, or F / V / C): freeze, one tick, rewind while recording.\n"
+        "<cg>.gdr2</c> replays from other bots in the replay folder show up in the list; Export writes one.\n"
         "<cy>Analysis</c> page: Analyze measures every click's frame window and L*; "
         "Optimize makes the replay safer; Find route beats the level with no replay.\n"
         "While the bot is on, nothing is saved to your progress.",
