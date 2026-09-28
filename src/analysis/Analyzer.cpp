@@ -18,6 +18,8 @@ namespace {
     constexpr int MAX_IDLE_STEPS_PER_FRAME = 50;
     // Frames in a row without any physics tick before we give up.
     constexpr int MAX_STALLED_FRAMES = 900;
+    // Bisection steps per CBF window edge: 1/16 tick precision.
+    constexpr int CBF_STEPS = 4;
 
     bool samePlayer(PlayerState const& a, PlayerState const& b) {
         return std::abs(a.x - b.x) <= POSITION_EPSILON
@@ -55,6 +57,10 @@ std::string Analyzer::statusText() const {
         case Phase::Reference: return fmt::format("Analysis: reference run, tick {}", Bot::get().tick);
         case Phase::Advance:
         case Phase::Candidate:
+            if (m_refining) {
+                return fmt::format("Analysis: {:.1f}%  input {}/{}  CBF edge {:+.3f}",
+                    progress() * 100.f, m_input + 1, count, m_offsetF);
+            }
             return fmt::format("Analysis: {:.1f}%  input {}/{}  offset {:+d}",
                 progress() * 100.f, m_input + 1, count, m_offset);
     }
@@ -78,6 +84,7 @@ Result<> Analyzer::start(PlayLayer* layer) {
 
     maxWindow = std::clamp(static_cast<int>(Mod::get()->getSavedValue<int64_t>("max-window", 20)), 13, 120);
     settleTicks = std::clamp(static_cast<int>(Mod::get()->getSavedValue<int64_t>("settle-ticks", 10)), 0, 240);
+    measureCbf = Mod::get()->getSavedValue<bool>("cbf-analysis", true);
 
     m_wasPractice = layer->m_isPracticeMode;
     bot.mode = BotMode::Play;
@@ -210,10 +217,10 @@ uint32_t Analyzer::snapshotTickFor(size_t index) const {
     return static_cast<uint32_t>(earliest);
 }
 
-uint32_t Analyzer::endTickFor(size_t index, int offset) const {
+uint32_t Analyzer::endTickFor(size_t index, double offset) const {
     auto const& bot = Bot::get();
     auto const& in = bot.replay.inputs;
-    uint32_t moved = static_cast<uint32_t>(static_cast<int64_t>(in[index].tick) + offset);
+    auto moved = static_cast<uint32_t>(std::max(0.0, std::ceil(in[index].tick + offset)));
     uint32_t changed = std::max(in[index].tick, moved);
 
     uint32_t end = changed + 60;
@@ -290,14 +297,28 @@ void Analyzer::beginAdvance(PlayLayer* layer, uint32_t target) {
     m_restorePending = true;
 }
 
-void Analyzer::beginCandidate(PlayLayer*, int offset) {
-    auto& bot = Bot::get();
+void Analyzer::beginCandidate(PlayLayer* layer, int offset) {
     m_offset = offset;
-    if (offset == 0) m_direction = 0;
+    if (offset == 0) {
+        m_direction = 0;
+        m_rightDeath = false;
+        m_leftDeath = false;
+        m_refining = false;
+    }
+    this->beginCandidateAt(layer, offset);
+}
+
+void Analyzer::beginCandidateAt(PlayLayer*, double offset) {
+    auto& bot = Bot::get();
+    m_offsetF = offset;
 
     bot.simInputs = bot.replay.inputs;
     auto& moved = bot.simInputs[m_input];
-    moved.tick = static_cast<uint32_t>(static_cast<int64_t>(moved.tick) + offset);
+    double time = moved.tick + offset;
+    double whole = std::floor(time);
+    moved.tick = static_cast<uint32_t>(std::max(0.0, whole));
+    moved.subtick = static_cast<float>(time - whole);
+    if (moved.subtick < 1e-4f) moved.subtick = 0.f;
     std::stable_sort(bot.simInputs.begin(), bot.simInputs.end(), [](auto const& a, auto const& b) {
         return a.tick < b.tick;
     });
@@ -312,6 +333,7 @@ void Analyzer::beginCandidate(PlayLayer*, int offset) {
 void Analyzer::finishCandidate(PlayLayer* layer) {
     auto& result = m_results[m_input];
     bool alive = !m_died;
+    if (m_refining) return this->finishRefine(layer, alive);
 
     if (m_offset == 0) {
         // The unshifted input has to reproduce the reference exactly, otherwise
@@ -340,10 +362,12 @@ void Analyzer::finishCandidate(PlayLayer* layer) {
     }
 
     if (m_direction > 0) {
+        m_rightDeath = true;
         m_direction = -1;
         m_offset = 0;
         return this->nextOffset(layer);
     }
+    m_leftDeath = true;
     this->finishInput(layer);
 }
 
@@ -364,9 +388,77 @@ void Analyzer::nextOffset(PlayLayer* layer) {
 }
 
 void Analyzer::finishInput(PlayLayer* layer) {
+    auto& result = m_results[m_input];
+    if (measureCbf && !result.unreliable && !result.capped) {
+        if (m_rightDeath || m_leftDeath) return this->startRefine(layer);
+        // Both sides stopped at a neighbouring input of the same button, not at a death.
+        result.cbf = static_cast<float>(result.window());
+    }
+    this->completeInput(layer);
+}
+
+void Analyzer::completeInput(PlayLayer* layer) {
     m_results[m_input].analyzed = true;
+    m_refining = false;
     ++m_input;
     this->prepareInput(layer);
+}
+
+// The whole-tick search gives, per side, the last offset that works and the first that
+// kills. With inputs allowed between ticks the real edge lies somewhere in between;
+// bisecting the fractional input time finds it. Sides that ended at a neighbouring
+// input instead of a death are assumed to be half a tick wide.
+void Analyzer::startRefine(PlayLayer* layer) {
+    auto const& result = m_results[m_input];
+    m_refining = true;
+    m_rightEdge = result.right + 0.5;
+    m_leftEdge = -result.left - 0.5;
+    m_refineIter = 0;
+    if (m_rightDeath) {
+        m_refineSide = 1;
+        m_refineAlive = result.right;
+        m_refineDead = result.right + 1;
+    }
+    else {
+        m_refineSide = -1;
+        m_refineAlive = -result.left;
+        m_refineDead = -result.left - 1;
+    }
+    this->refineStep(layer);
+}
+
+void Analyzer::refineStep(PlayLayer* layer) {
+    if (m_refineIter < CBF_STEPS) {
+        return this->beginCandidateAt(layer, (m_refineAlive + m_refineDead) * 0.5);
+    }
+
+    double edge = (m_refineAlive + m_refineDead) * 0.5;
+    if (m_refineSide > 0) {
+        m_rightEdge = edge;
+        if (m_leftDeath) {
+            auto const& result = m_results[m_input];
+            m_refineSide = -1;
+            m_refineIter = 0;
+            m_refineAlive = -result.left;
+            m_refineDead = -result.left - 1;
+            return this->refineStep(layer);
+        }
+    }
+    else {
+        m_leftEdge = edge;
+    }
+
+    auto& result = m_results[m_input];
+    result.cbf = static_cast<float>(std::max(m_rightEdge - m_leftEdge, 1.0 / (1 << CBF_STEPS)));
+    this->completeInput(layer);
+}
+
+void Analyzer::finishRefine(PlayLayer* layer, bool alive) {
+    m_path.clear();
+    if (alive) m_refineAlive = m_offsetF;
+    else m_refineDead = m_offsetF;
+    ++m_refineIter;
+    this->refineStep(layer);
 }
 
 void Analyzer::finish(PlayLayer* layer, bool keepResults, std::string const& message) {
@@ -452,12 +544,13 @@ void Analyzer::onTickEnd(GJBaseGameLayer* layer, uint32_t tick) {
             bool known = tick < bot.track.size() && bot.track[tick].valid;
             bool same = known && sameState(state, bot.track[tick]);
             auto const& input = bot.replay.inputs[m_input];
-            if (m_offset == 0) {
+            if (!m_refining && m_offset == 0) {
                 if (!same) m_mismatch = true;
             }
             else {
-                uint32_t changed = std::max<int64_t>(input.tick, static_cast<int64_t>(input.tick) + m_offset);
-                if (tick >= changed && same) {
+                auto moved = static_cast<int64_t>(std::ceil(input.tick + m_offsetF));
+                int64_t changed = std::max<int64_t>(input.tick, moved);
+                if (static_cast<int64_t>(tick) >= changed && same) {
                     m_converged = true;
                     m_runDone = true;
                 }

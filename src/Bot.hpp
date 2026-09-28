@@ -18,6 +18,9 @@ struct BotInput {
     uint8_t button;
     bool player1;
     bool down;
+    // Fraction of the tick at which the input happens (Click Between Frames style).
+    // Only the analyzer sets this; replays store whole ticks.
+    float subtick = 0.f;
 };
 
 // Result of the frame window analysis for one input.
@@ -31,6 +34,9 @@ struct InputAnalysis {
     // Replaying this input unchanged did not reproduce the reference run, so the
     // window for it cannot be trusted.
     bool unreliable = false;
+    // Window width in fractional ticks when inputs can land between ticks (CBF),
+    // 0 if it was not measured.
+    float cbf = 0.f;
 
     int window() const { return left + right + 1; }
 };
@@ -57,6 +63,12 @@ struct Replay {
     // Running L* and difficulty share after each input, parallel to `inputs`.
     std::vector<double> lstar;
     std::vector<double> lstarShare;
+
+    // Window used for display and L*: the CBF width when enabled and measured.
+    double windowOf(size_t index, bool cbf) const {
+        auto const& a = analysis[index];
+        return cbf && a.cbf > 0.f ? a.cbf : a.window();
+    }
 
     uint32_t lastTick() const { return inputs.empty() ? 0 : inputs.back().tick; }
     bool hasAnalysis() const { return !analysis.empty() && analysis.size() == inputs.size(); }
@@ -93,6 +105,16 @@ public:
     // Past / future / alternative trajectory lines.
     bool showPaths = true;
     bool playSounds = true;
+    // Show and score CBF (fractional) windows instead of whole ticks.
+    bool useCbf = true;
+
+    // An input the analyzer placed between ticks, waiting for the player update of
+    // this tick to split it (see hooks.cpp).
+    struct PendingSplit {
+        bool active = false;
+        BotInput input {};
+    };
+    PendingSplit split;
 
     // Measured physics rate: ticks per second of level time.
     int measuredTps = 0;

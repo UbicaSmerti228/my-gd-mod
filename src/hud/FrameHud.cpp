@@ -49,16 +49,19 @@ FrameHud* FrameHud::create(PlayLayer* layer) {
     return nullptr;
 }
 
-int FrameHud::categoryFor(InputAnalysis const& a) {
-    if (!a.analyzed || a.unreliable) return -1;
-    int w = a.window();
-    if (a.capped || w > 12) return -1;
-    if (w >= 9) return 0;
-    if (w >= 7) return 1;
-    if (w >= 5) return 2;
-    if (w == 4) return 3;
-    if (w == 3) return 4;
-    if (w == 2) return 5;
+int FrameHud::categoryFor(size_t index) {
+    auto const& bot = Bot::get();
+    auto const& a = bot.replay.analysis[index];
+    if (!a.analyzed || a.unreliable || a.capped) return -1;
+    // CBF windows are fractional: 3.44 counts as "3", 0.6 as "1".
+    double w = bot.replay.windowOf(index, bot.useCbf);
+    if (w >= 13.0) return -1;
+    if (w >= 9.0) return 0;
+    if (w >= 7.0) return 1;
+    if (w >= 5.0) return 2;
+    if (w >= 4.0) return 3;
+    if (w >= 3.0) return 4;
+    if (w >= 2.0) return 5;
     return 6;
 }
 
@@ -162,7 +165,7 @@ void FrameHud::resetTo(uint32_t tick) {
         m_lastIndex = static_cast<long>(i);
         if (replay.inputs[i].down) ++m_totalPresses;
         if (replay.hasAnalysis()) {
-            int category = categoryFor(replay.analysis[i]);
+            int category = categoryFor(i);
             if (category >= 0) ++m_counts[category];
         }
     }
@@ -223,7 +226,7 @@ void FrameHud::onInputPlayed(size_t index) {
 
     if (replay.hasAnalysis()) {
         auto const& analysis = replay.analysis[index];
-        int category = categoryFor(analysis);
+        int category = categoryFor(index);
         if (category >= 0) {
             ++m_counts[category];
             this->refreshCounts(true, category);
@@ -259,7 +262,10 @@ void FrameHud::spawnMarker(size_t index, int category) {
     ring->drawPolygon(verts, SEGMENTS, { 0.f, 0.f, 0.f, 0.f }, 2.f, toColor4F(color, 1.f));
     marker->addChild(ring);
 
-    auto text = analysis.unreliable ? std::string("?") : std::to_string(analysis.window());
+    bool cbf = Bot::get().useCbf && analysis.cbf > 0.f;
+    auto text = analysis.unreliable ? std::string("?")
+        : cbf ? fmt::format("{:.2f}", analysis.cbf)
+        : std::to_string(analysis.window());
     auto label = CCLabelBMFont::create(text.c_str(), "bigFont.fnt");
     label->setAnchorPoint({ 1.f, 0.5f });
     label->setPosition({ -18.f, 0.f });
@@ -338,7 +344,7 @@ void FrameHud::drawTrajectories() {
         int64_t tick = replay.inputs[i].tick;
         if (tick < now - FAN_BEHIND_TICKS) continue;
         if (tick > now + FAN_AHEAD_TICKS) break;
-        int category = categoryFor(replay.analysis[i]);
+        int category = categoryFor(i);
         if (category < 0) continue;
         auto color = categoryColor(category);
         for (auto const& path : paths[i]) {

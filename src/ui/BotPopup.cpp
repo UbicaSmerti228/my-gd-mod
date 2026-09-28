@@ -139,8 +139,9 @@ bool BotPopup::init() {
         { "Counter", "show-counter", &Bot::showCounter },
         { "Paths", "show-paths", &Bot::showPaths },
         { "Sounds", "play-sounds", &Bot::playSounds },
+        { "CBF", "use-cbf", &Bot::useCbf },
     };
-    float x = 18.f;
+    float x = 16.f;
     for (auto const& t : toggles) {
         auto field = t.field;
         std::string key = t.key;
@@ -149,6 +150,8 @@ bool BotPopup::init() {
             auto& bot = Bot::get();
             bot.*field = !toggler->isToggled();
             Mod::get()->setSavedValue(key, bot.*field);
+            // Whole-tick and CBF windows give different L* values.
+            if (key == "use-cbf") LStar::computeAsync();
         });
         toggler->toggle(Bot::get().*field);
         m_buttonMenu->addChildAtPosition(toggler, Anchor::BottomLeft, { x, 20.f });
@@ -156,17 +159,17 @@ bool BotPopup::init() {
         label->setScale(0.28f);
         label->setAnchorPoint({ 0.f, 0.5f });
         m_mainLayer->addChildAtPosition(label, Anchor::BottomLeft, { x + 13.f, 20.f });
-        x += 80.f;
+        x += 78.f;
     }
 
     auto folderBtn = CCMenuItemExt::createSpriteExtra(
-        ButtonSprite::create("Folder", 60, 0, 0.45f, true, "bigFont.fnt", "GJ_button_04.png", 22.f),
+        ButtonSprite::create("Folder", 50, 0, 0.4f, true, "bigFont.fnt", "GJ_button_04.png", 20.f),
         [](CCMenuItemSpriteExtra*) {
             (void)file::createDirectoryAll(Bot::replayDir());
             file::openFolder(Bot::replayDir());
         }
     );
-    m_buttonMenu->addChildAtPosition(folderBtn, Anchor::BottomRight, { -40.f, 20.f });
+    m_buttonMenu->addChildAtPosition(folderBtn, Anchor::TopRight, { -34.f, -20.f });
 
     this->refreshInfo();
     this->refreshList();

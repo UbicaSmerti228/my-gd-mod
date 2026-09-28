@@ -32,6 +32,8 @@ public:
     int maxWindow = 20;
     // Ticks after the next input the shifted run must survive.
     int settleTicks = 10;
+    // Also measure fractional (Click Between Frames) windows.
+    bool measureCbf = true;
 
     bool isActive() const { return m_phase != Phase::Idle; }
     float progress() const;
@@ -62,6 +64,11 @@ private:
     void prepareInput(PlayLayer* layer);
     void beginAdvance(PlayLayer* layer, uint32_t target);
     void beginCandidate(PlayLayer* layer, int offset);
+    void beginCandidateAt(PlayLayer* layer, double offset);
+    void startRefine(PlayLayer* layer);
+    void refineStep(PlayLayer* layer);
+    void finishRefine(PlayLayer* layer, bool alive);
+    void completeInput(PlayLayer* layer);
     void finishCandidate(PlayLayer* layer);
     void finishInput(PlayLayer* layer);
     void nextOffset(PlayLayer* layer);
@@ -70,7 +77,7 @@ private:
     void restore(PlayLayer* layer, CheckpointObject* checkpoint);
     bool offsetAllowed(int offset) const;
     uint32_t snapshotTickFor(size_t index) const;
-    uint32_t endTickFor(size_t index, int offset) const;
+    uint32_t endTickFor(size_t index, double offset) const;
     bool movedPlayerIsP2(GJBaseGameLayer* layer) const;
 
     Phase m_phase = Phase::Idle;
@@ -91,7 +98,19 @@ private:
     bool m_converged = false;
     bool m_mismatch = false;
     int m_offset = 0;
+    double m_offsetF = 0.0;
     int m_direction = 0;
+    bool m_rightDeath = false;
+    bool m_leftDeath = false;
+
+    // CBF refinement: bisecting the fractional position of one window edge.
+    bool m_refining = false;
+    int m_refineSide = 0;
+    int m_refineIter = 0;
+    double m_refineAlive = 0.0;
+    double m_refineDead = 0.0;
+    double m_rightEdge = 0.0;
+    double m_leftEdge = 0.0;
     uint32_t m_endTick = 0;
     uint32_t m_referenceEnd = 0;
     std::vector<cocos2d::CCPoint> m_path;

@@ -11,7 +11,7 @@ using namespace geode::prelude;
 
 namespace {
     constexpr char const* REPLAY_MAGIC = "ILR";
-    constexpr int REPLAY_VERSION = 2;
+    constexpr int REPLAY_VERSION = 3;
     constexpr char const* REPLAY_EXT = ".ilr";
 
     bool isValidName(std::string const& name) {
@@ -39,6 +39,7 @@ Bot::Bot() {
     showCounter = Mod::get()->getSavedValue<bool>("show-counter", true);
     showPaths = Mod::get()->getSavedValue<bool>("show-paths", true);
     playSounds = Mod::get()->getSavedValue<bool>("play-sounds", true);
+    useCbf = Mod::get()->getSavedValue<bool>("use-cbf", true);
 }
 
 void Bot::setMode(BotMode newMode) {
@@ -80,6 +81,7 @@ void Bot::onLevelStart(GJGameLevel* level) {
 }
 
 void Bot::onReset(GJBaseGameLayer* layer) {
+    split.active = false;
     m_tpsStartTick = tick;
     m_tpsStartTime = layer->m_gameState.m_levelTime;
 
@@ -114,11 +116,22 @@ void Bot::onReset(GJBaseGameLayer* layer) {
 }
 
 void Bot::onTickStart(GJBaseGameLayer* layer) {
+    if (split.active) {
+        // The player update never picked up the split input: apply it on the tick boundary.
+        split.active = false;
+        injecting = true;
+        layer->handleButton(split.input.down, split.input.button, split.input.player1);
+        injecting = false;
+    }
     if (mode != BotMode::Play && !analyzing) return;
     auto const& in = playbackInputs();
     while (playIndex < in.size() && in[playIndex].tick <= tick) {
         auto index = playIndex++;
         auto const& i = in[index];
+        if (analyzing && i.subtick > 0.f) {
+            split = { true, i };
+            continue;
+        }
         injecting = true;
         layer->handleButton(i.down, i.button, i.player1);
         injecting = false;
@@ -191,7 +204,7 @@ Result<> Bot::save(std::string const& name) const {
         out << "analysis " << replay.analysis.size() << '\n';
         for (auto const& a : replay.analysis) {
             int flags = (a.analyzed ? 1 : 0) | (a.capped ? 2 : 0) | (a.unreliable ? 4 : 0);
-            out << a.left << ' ' << a.right << ' ' << flags << '\n';
+            out << a.left << ' ' << a.right << ' ' << flags << ' ' << a.cbf << '\n';
         }
     }
     // The level name goes last since it may contain spaces.
@@ -235,6 +248,7 @@ Result<> Bot::load(std::string const& name) {
             for (auto& a : loaded.analysis) {
                 int flags = 0;
                 if (!(in >> a.left >> a.right >> flags)) return Err("Corrupted replay (analysis list)");
+                if (version >= 3 && !(in >> a.cbf)) return Err("Corrupted replay (analysis list)");
                 a.analyzed = flags & 1;
                 a.capped = flags & 2;
                 a.unreliable = flags & 4;

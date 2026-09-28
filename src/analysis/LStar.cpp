@@ -81,7 +81,8 @@ namespace LStar {
             auto const& a = replay.analysis[i];
             if (!a.analyzed || a.unreliable) continue;
             sampleOf[i] = samples.size();
-            samples.push_back({ replay.inputs[i].tick / fps, a.window() / fps * WINDOW_SCALE });
+            double window = replay.windowOf(i, Bot::get().useCbf);
+            samples.push_back({ replay.inputs[i].tick / fps, window / fps * WINDOW_SCALE });
         }
         if (samples.empty()) return;
 

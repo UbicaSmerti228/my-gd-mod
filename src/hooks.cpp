@@ -7,6 +7,7 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/PlayerObject.hpp>
 
 #include <fmt/format.h>
 
@@ -222,6 +223,86 @@ class $modify(BotPauseLayer, PauseLayer) {
             fallback->addChild(button);
             this->addChild(fallback);
         }
+    }
+};
+
+// Inputs between ticks, the way Click Between Frames does it (MIT, theyareonit/Click-Between-Frames):
+// the player's step is split at the input's fraction, the first part is moved and
+// collided, the input is applied, and the rest of the step runs. Only the analyzer
+// places inputs between ticks.
+namespace {
+    bool s_midStep = false;
+    struct RotationFix {
+        PlayerObject* player = nullptr;
+        float delta = 0.f;
+        CCPoint position;
+    } s_rotationFix;
+
+    void resetCollisionLog(PlayerObject* p) {
+        p->m_collisionLogTop->removeAllObjects();
+        p->m_collisionLogBottom->removeAllObjects();
+        p->m_collisionLogLeft->removeAllObjects();
+        p->m_collisionLogRight->removeAllObjects();
+        p->m_lastCollisionLeft = -1;
+        p->m_lastCollisionRight = -1;
+        p->m_lastCollisionBottom = -1;
+        p->m_lastCollisionTop = -1;
+    }
+}
+
+class $modify(BotPlayerObject, PlayerObject) {
+    void update(float dt) {
+        auto& bot = Bot::get();
+        auto pl = PlayLayer::get();
+        if (!bot.split.active || s_midStep || !pl) return PlayerObject::update(dt);
+
+        auto const& input = bot.split.input;
+        bool toP2 = !input.player1 && pl->m_gameState.m_isDualMode;
+        if (this != (toP2 ? pl->m_player2 : pl->m_player1)) return PlayerObject::update(dt);
+
+        bot.split.active = false;
+        auto apply = [&] {
+            bot.injecting = true;
+            pl->handleButton(input.down, input.button, input.player1);
+            bot.injecting = false;
+        };
+
+        // While a click is only being buffered (in the air, nothing to hit) splitting
+        // changes nothing, and CBF itself falls back to the step boundary.
+        bool startedOnGround = m_isOnGround;
+        bool notBuffering = startedOnGround || m_touchingRings->count() || m_isDashing
+            || m_isDart || m_isBird || m_isShip || m_isSwing;
+        if (!notBuffering) {
+            PlayerObject::update(dt);
+            return apply();
+        }
+
+        auto position = this->getPosition();
+        float first = dt * input.subtick;
+        s_midStep = true;
+        PlayerObject::update(first);
+        if ((m_yVelocity < 0) ^ m_isUpsideDown) m_isOnGround = startedOnGround;
+        if (!m_isOnSlope || m_isDart) pl->checkCollisions(this, 0.f, true);
+        else pl->checkCollisions(this, dt, true);
+        PlayerObject::updateRotation(first);
+        resetCollisionLog(this);
+        apply();
+        float rest = dt - first;
+        PlayerObject::update(rest);
+        s_midStep = false;
+        s_rotationFix = { this, rest, position };
+    }
+
+    void updateRotation(float dt) {
+        if (s_rotationFix.player == this && !s_midStep) {
+            // Finish the rotation left incomplete by the split step.
+            auto fix = s_rotationFix;
+            s_rotationFix.player = nullptr;
+            PlayerObject::updateRotation(fix.delta);
+            m_lastPosition = fix.position;
+            return;
+        }
+        PlayerObject::updateRotation(dt);
     }
 };
 

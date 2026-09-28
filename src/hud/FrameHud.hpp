@@ -17,7 +17,7 @@ public:
     static FrameHud* create(PlayLayer* layer);
 
     // Category index for a window (0 = "9-12" ... 6 = "1"), -1 when it is not counted.
-    static int categoryFor(InputAnalysis const& analysis);
+    static int categoryFor(size_t index);
     static cocos2d::ccColor3B categoryColor(int category);
 
     void onInputPlayed(size_t index);
