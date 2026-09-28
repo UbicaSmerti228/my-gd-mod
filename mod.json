@@ -1,0 +1,14 @@
+{
+	"geode": "5.10.1",
+	"gd": {
+		"win": "2.2081"
+	},
+	"id": "ubicasmerti228.ill-replay-bot",
+	"name": "ILL Replay Bot",
+	"version": "v1.0.0",
+	"developer": "UbicaSmerti228",
+	"description": "Tick-accurate replay bot for Impossible Levels List showcases",
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3"
+	}
+}

@@ -1,16 +1,24 @@
-name: Build DLL
-on: [push]
+name: Build Geode Mod
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+
 jobs:
   build:
+    name: Windows
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Configure CMake
-        run: cmake -B build -A Win32
-      - name: Build
-        run: cmake --build build --config Release
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+
+      - name: Build the mod
+        uses: geode-sdk/build-geode-mod@main
+        id: build
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: xinput9_1_0-dll
-          path: build/Release/xinput9_1_0.dll
+          name: ILL Replay Bot
+          path: ${{ steps.build.outputs.build-output }}
