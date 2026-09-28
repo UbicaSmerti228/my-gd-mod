@@ -23,6 +23,7 @@ public:
 
     bool isActive() const override { return m_phase != Phase::Idle; }
     std::string statusText() const override;
+    float progress() const override { return m_bestPercent / 100.f; }
 
     geode::Result<> start(PlayLayer* layer);
     void cancel(PlayLayer* layer) override;

@@ -199,19 +199,29 @@ void Bot::onTickEnd(GJBaseGameLayer* layer) {
 }
 
 void Bot::record(GJBaseGameLayer* layer, bool down, int button, bool player1) {
+    uint32_t at = tick;
     float subtick = 0.f;
-    // With Click Between Frames the click lands inside the player's step, after part of
-    // the movement: how far the player got, against a whole step, is the fraction.
-    if (cbfMode && inTick) {
+    // How far into this tick's step the player had moved when the click arrived. Before
+    // the step (the normal case) the click belongs to this tick. After the whole step it
+    // can only affect the next one. In between is a click between ticks, which only Click
+    // Between Frames (or the game's Click Between Steps) produces: kept in CBF mode,
+    // otherwise rounded to the nearest tick.
+    if (inTick) {
         int p = !player1 && layer->m_gameState.m_isDualMode ? 1 : 0;
         auto player = p ? layer->m_player2 : layer->m_player1;
         float step = m_lastStepX[p];
         if (player && std::abs(step) > 0.01f) {
             float fraction = (player->getPositionX() - m_tickStartX[p]) / step;
-            if (fraction > 0.001f) subtick = std::min(fraction, 0.999f);
+            if (fraction >= 0.999f || (!cbfMode && fraction >= 0.5f)) at = tick + 1;
+            else if (cbfMode && fraction > 0.001f) subtick = fraction;
         }
     }
-    replay.inputs.push_back({ tick, static_cast<uint8_t>(button), player1, down, subtick });
+    // Keep the list in time order (a click moved to the next tick may follow later ones).
+    BotInput input { at, static_cast<uint8_t>(button), player1, down, subtick };
+    auto pos = std::upper_bound(replay.inputs.begin(), replay.inputs.end(), input, [](auto const& a, auto const& b) {
+        return a.tick < b.tick || (a.tick == b.tick && a.subtick < b.subtick);
+    });
+    replay.inputs.insert(pos, input);
     unsaved = true;
 }
 
@@ -272,7 +282,7 @@ void Bot::markSaved(std::string const& name) {
     unsaved = false;
 }
 
-Result<> Bot::load(std::string const& name) {
+Result<Replay> Bot::readReplay(std::string const& name) {
     if (!isValidName(name)) return Err("Invalid replay name");
     auto data = file::readString(replayDir() / (name + REPLAY_EXT));
     if (!data) return Err(data.unwrapErr());
@@ -321,18 +331,22 @@ Result<> Bot::load(std::string const& name) {
     }
 
     // Inputs are written sorted; an out-of-order file cannot keep its analysis aligned.
-    bool sorted = std::is_sorted(loaded.inputs.begin(), loaded.inputs.end(), [](auto const& a, auto const& b) {
+    auto byTime = [](auto const& a, auto const& b) {
         return a.tick < b.tick || (a.tick == b.tick && a.subtick < b.subtick);
-    });
-    if (!sorted) {
-        std::stable_sort(loaded.inputs.begin(), loaded.inputs.end(), [](auto const& a, auto const& b) {
-            return a.tick < b.tick || (a.tick == b.tick && a.subtick < b.subtick);
-        });
+    };
+    if (!std::is_sorted(loaded.inputs.begin(), loaded.inputs.end(), byTime)) {
+        std::stable_sort(loaded.inputs.begin(), loaded.inputs.end(), byTime);
         loaded.analysis.clear();
     }
+    return Ok(std::move(loaded));
+}
+
+Result<> Bot::load(std::string const& name) {
+    auto loaded = readReplay(name);
+    if (!loaded) return Err(loaded.unwrapErr());
 
     Analyzer::get().clearPaths();
-    replay = std::move(loaded);
+    replay = std::move(loaded).unwrap();
     replayName = name;
     unsaved = false;
     playIndex = 0;

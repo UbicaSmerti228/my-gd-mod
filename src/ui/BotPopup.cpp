@@ -5,6 +5,7 @@
 #include "../stats/Forecast.hpp"
 
 #include <Geode/ui/SliderNode.hpp>
+#include <algorithm>
 #include <fmt/format.h>
 
 using namespace geode::prelude;
@@ -15,6 +16,7 @@ namespace {
     constexpr float HEIGHT = 280.f;
     constexpr float LIST_WIDTH = 190.f;
     constexpr float LIST_HEIGHT = 82.f;
+    constexpr float ROW_HEIGHT = 27.f;
     constexpr float RIGHT_X = 312.f;
 
     NineSlice* makePanel(CCSize size) {
@@ -395,10 +397,10 @@ void BotPopup::refreshList() {
     for (auto const& name : names) {
         auto row = CCMenu::create();
         row->ignoreAnchorPointForPosition(false);
-        row->setContentSize({ LIST_WIDTH, 22.f });
+        row->setContentSize({ LIST_WIDTH, ROW_HEIGHT });
 
         bool loaded = name == current;
-        auto bg = makePanel({ LIST_WIDTH - 4.f, 20.f });
+        auto bg = makePanel({ LIST_WIDTH - 4.f, ROW_HEIGHT - 2.f });
         bg->setOpacity(loaded ? 140 : 60);
         if (loaded) bg->setColor({ 40, 120, 60 });
         row->addChildAtPosition(bg, Anchor::Center);
@@ -407,7 +409,27 @@ void BotPopup::refreshList() {
         label->setAnchorPoint({ 0.f, 0.5f });
         label->limitLabelWidth(120.f, 0.35f, 0.1f);
         if (loaded) label->setColor({ 140, 255, 160 });
-        row->addChildAtPosition(label, Anchor::Left, { 6.f, 0.f });
+        row->addChildAtPosition(label, Anchor::Left, { 6.f, 5.f });
+
+        // What is in the file: clicks, analysis, CBF, and whether it is for this level.
+        std::string details;
+        if (auto info = Bot::readReplay(name)) {
+            auto const& r = info.unwrap();
+            size_t presses = std::count_if(r.inputs.begin(), r.inputs.end(), [](auto const& i) { return i.down; });
+            bool cbf = std::any_of(r.inputs.begin(), r.inputs.end(), [](auto const& i) { return i.subtick > 0.f; });
+            details = fmt::format("{} clicks", presses);
+            if (r.hasAnalysis()) details += "  |  analyzed";
+            if (cbf) details += "  |  CBF";
+            if (r.levelID && currentLevelID() && r.levelID != currentLevelID()) details += "  |  other level";
+        }
+        else {
+            details = "unreadable file";
+        }
+        auto detailLabel = CCLabelBMFont::create(details.c_str(), "chatFont.fnt");
+        detailLabel->setAnchorPoint({ 0.f, 0.5f });
+        detailLabel->limitLabelWidth(125.f, 0.42f, 0.1f);
+        detailLabel->setColor({ 190, 190, 190 });
+        row->addChildAtPosition(detailLabel, Anchor::Left, { 6.f, -6.f });
 
         auto loadBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
             "GJ_playBtn2_001.png", 0.3f,

@@ -121,6 +121,8 @@ public:
     std::vector<BotInput> splits;
     // Set while GJBaseGameLayer::processCommands runs.
     bool inTick = false;
+    // The last level reset restored the players from a full state snapshot.
+    bool restoredPlayers = false;
     // Replay changed since it was last saved or loaded.
     bool unsaved = false;
     // Name the current replay was loaded from or saved as.
@@ -151,6 +153,8 @@ public:
     geode::Result<> save(std::string const& name) const;
     void markSaved(std::string const& name);
     geode::Result<> load(std::string const& name);
+    // Reads a replay file without loading it.
+    static geode::Result<Replay> readReplay(std::string const& name);
     static geode::Result<> remove(std::string const& name);
 
 private:

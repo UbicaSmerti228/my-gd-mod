@@ -43,7 +43,7 @@ public:
 
     bool isActive() const override { return m_phase != Phase::Idle; }
     std::string statusText() const override;
-    float progress() const;
+    float progress() const override;
 
     // Alternative trajectories found for each input, parallel to the replay inputs.
     std::vector<std::vector<TrajectoryPath>> paths;
@@ -83,6 +83,7 @@ private:
     uint32_t snapshotTickFor(size_t index) const;
     uint32_t endTickFor(size_t index, double offset) const;
     bool movedPlayerIsP2(GJBaseGameLayer* layer) const;
+    float inputProgress() const;
     std::vector<BotInput> optimizedInputs() const;
 
     Phase m_phase = Phase::Idle;

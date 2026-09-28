@@ -48,9 +48,21 @@ Analyzer& Analyzer::get() {
 
 float Analyzer::progress() const {
     auto count = Bot::get().replay.inputs.size();
-    if (m_phase != Phase::Advance && m_phase != Phase::Candidate) return 0.f;
-    if (count == 0) return 0.f;
-    return static_cast<float>(m_input) / static_cast<float>(count);
+    float inputs = 0.f;
+    if ((m_phase == Phase::Advance || m_phase == Phase::Candidate) && count > 0) {
+        inputs = static_cast<float>(m_input) / static_cast<float>(count);
+    }
+    else if (m_phase == Phase::Verify) {
+        inputs = 1.f;
+    }
+    // The optimizer analyzes twice: the first half of the bar is the original replay.
+    if (!m_optimize) return inputs;
+    return m_stage == 1 ? inputs * 0.5f : 0.5f + inputs * 0.5f;
+}
+
+float Analyzer::inputProgress() const {
+    auto count = Bot::get().replay.inputs.size();
+    return count ? static_cast<float>(m_input) / static_cast<float>(count) : 0.f;
 }
 
 std::string Analyzer::statusText() const {
@@ -65,10 +77,10 @@ std::string Analyzer::statusText() const {
         case Phase::Candidate:
             if (m_refining) {
                 return fmt::format("{}{:.1f}%  input {}/{}  CBF edge {:+.3f}",
-                    stage, progress() * 100.f, m_input + 1, count, m_offsetF);
+                    stage, inputProgress() * 100.f, m_input + 1, count, m_offsetF);
             }
             return fmt::format("{}{:.1f}%  input {}/{}  offset {:+d}",
-                stage, progress() * 100.f, m_input + 1, count, m_offset);
+                stage, inputProgress() * 100.f, m_input + 1, count, m_offset);
     }
     return "";
 }

@@ -22,7 +22,12 @@ public:
     // Called instead of the normal game update; `step` runs one original update.
     virtual void drive(PlayLayer* layer, std::function<void(float)> const& step) = 0;
     virtual void onTickEnd(GJBaseGameLayer* layer, uint32_t tick) = 0;
-    virtual void onReset(GJBaseGameLayer* layer) { repressHeld(layer); }
+    virtual void onReset(GJBaseGameLayer* layer) {
+        // A full player snapshot already restored which buttons are held.
+        if (!Bot::get().restoredPlayers) repressHeld(layer);
+    }
+    // 0..1, for the progress bar.
+    virtual float progress() const { return 0.f; }
     virtual void onDeath() = 0;
     virtual void onComplete() = 0;
 

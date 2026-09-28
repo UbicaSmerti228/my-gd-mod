@@ -1,6 +1,7 @@
 #include "Bot.hpp"
 #include "analysis/Analyzer.hpp"
 #include "sim/SimController.hpp"
+#include "sim/PlayerState.hpp"
 #include "stats/Forecast.hpp"
 #include "hud/FrameHud.hpp"
 #include "ui/BotPopup.hpp"
@@ -16,6 +17,8 @@
 using namespace geode::prelude;
 
 namespace {
+    constexpr float PROGRESS_WIDTH = 160.f;
+
     bool isBotLayer(GJBaseGameLayer* layer) {
         auto pl = PlayLayer::get();
         return pl && static_cast<GJBaseGameLayer*>(pl) == layer;
@@ -80,7 +83,10 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
 class $modify(BotPlayLayer, PlayLayer) {
     struct Fields {
         CCLabelBMFont* overlay = nullptr;
+        CCLayerColor* progressBack = nullptr;
+        CCLayerColor* progressFill = nullptr;
         FrameHud* hud = nullptr;
+        bool warnedStartPos = false;
     };
 
     static FrameHud* currentHud() {
@@ -99,17 +105,24 @@ class $modify(BotPlayLayer, PlayLayer) {
         label->setPosition({ CCDirector::get()->getWinSize().width - 6.f, 4.f });
         label->setID("overlay"_spr);
 
+        // Progress bar of the analysis / route search, above the status label.
+        auto winSize = CCDirector::get()->getWinSize();
+        auto back = CCLayerColor::create({ 0, 0, 0, 150 }, PROGRESS_WIDTH + 2.f, 6.f);
+        back->setPosition({ winSize.width - 7.f - PROGRESS_WIDTH, 17.f });
+        back->setVisible(false);
+        auto fill = CCLayerColor::create({ 255, 220, 90, 230 }, 0.f, 4.f);
+        fill->setPosition({ 1.f, 1.f });
+        back->addChild(fill);
+
         auto hud = FrameHud::create(this);
         m_fields->hud = hud;
-        if (m_uiLayer) {
-            m_uiLayer->addChild(hud, 9999);
-            m_uiLayer->addChild(label, 10000);
-        }
-        else {
-            this->addChild(hud, 9999);
-            this->addChild(label, 10000);
-        }
+        CCNode* parent = m_uiLayer ? static_cast<CCNode*>(m_uiLayer) : this;
+        parent->addChild(hud, 9999);
+        parent->addChild(label, 10000);
+        parent->addChild(back, 10000);
         m_fields->overlay = label;
+        m_fields->progressBack = back;
+        m_fields->progressFill = fill;
 
         this->schedule(schedule_selector(BotPlayLayer::updateOverlay), 0.1f);
         this->updateOverlay(0.f);
@@ -122,8 +135,16 @@ class $modify(BotPlayLayer, PlayLayer) {
         auto& bot = Bot::get();
         // loadFromCheckpoint (called from inside resetLevel in practice) sets the real value.
         bot.tick = 0;
+        bot.restoredPlayers = false;
         PlayLayer::resetLevel();
         bot.onReset(this);
+        // Replays count ticks from the start of the level; from a start position they
+        // only line up with that same start position.
+        if (bot.mode != BotMode::Off && !bot.analyzing && m_startPosObject && !m_isPracticeMode && !m_fields->warnedStartPos) {
+            m_fields->warnedStartPos = true;
+            Notification::create("Start position active: the replay only matches runs from this same start position",
+                NotificationIcon::Warning, 4.f)->show();
+        }
         if (auto hud = m_fields->hud) hud->resetTo(bot.tick);
         applySafeMode(this);
         if (isHumanAttempt(this)) Forecast::onAttemptStart(this);
@@ -131,8 +152,14 @@ class $modify(BotPlayLayer, PlayLayer) {
 
     CheckpointObject* createCheckpoint() {
         auto checkpoint = PlayLayer::createCheckpoint();
-        if (checkpoint) {
-            checkpoint->setUserObject("tick"_spr, CCInteger::create(static_cast<int>(Bot::get().tick)));
+        if (!checkpoint) return checkpoint;
+        auto& bot = Bot::get();
+        checkpoint->setUserObject("tick"_spr, CCInteger::create(static_cast<int>(bot.tick)));
+        if (bot.mode != BotMode::Off || bot.analyzing) {
+            auto players = PlayerStateHolder::create();
+            if (m_player1) players->p1.save(m_player1);
+            if (m_player2) players->p2.save(m_player2);
+            checkpoint->setUserObject("players"_spr, players);
         }
         return checkpoint;
     }
@@ -140,8 +167,18 @@ class $modify(BotPlayLayer, PlayLayer) {
     void loadFromCheckpoint(CheckpointObject* checkpoint) {
         PlayLayer::loadFromCheckpoint(checkpoint);
         if (!checkpoint) return;
+        auto& bot = Bot::get();
         if (auto saved = typeinfo_cast<CCInteger*>(checkpoint->getUserObject("tick"_spr))) {
-            Bot::get().tick = static_cast<uint32_t>(saved->getValue());
+            bot.tick = static_cast<uint32_t>(saved->getValue());
+        }
+        // Put back what the game's checkpoint left out, so the level continues exactly
+        // like the run that made the checkpoint.
+        if (bot.mode != BotMode::Off || bot.analyzing) {
+            if (auto players = typeinfo_cast<PlayerStateHolder*>(checkpoint->getUserObject("players"_spr))) {
+                if (m_player1) players->p1.apply(m_player1);
+                if (m_player2) players->p2.apply(m_player2);
+                bot.restoredPlayers = true;
+            }
         }
     }
 
@@ -179,12 +216,19 @@ class $modify(BotPlayLayer, PlayLayer) {
         if (!label) return;
         auto& bot = Bot::get();
 
+        auto back = m_fields->progressBack;
         if (auto sim = SimController::active()) {
             label->setVisible(true);
             label->setString(sim->statusText().c_str());
             label->setColor({ 255, 220, 90 });
+            if (back) {
+                back->setVisible(true);
+                float progress = std::clamp(sim->progress(), 0.f, 1.f);
+                m_fields->progressFill->setContentSize({ PROGRESS_WIDTH * progress, 4.f });
+            }
             return;
         }
+        if (back) back->setVisible(false);
         if (!bot.showOverlay) {
             label->setVisible(false);
             return;
