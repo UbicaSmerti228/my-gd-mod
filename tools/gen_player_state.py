@@ -56,21 +56,28 @@ def main():
     out.append("")
     out.append(f"// {len(fields)} plain-value fields of PlayerObject, plus its position and rotation.")
     out.append("struct PlayerStateSnapshot {")
+    # gd:: containers only match the standard library on Windows; on Android and iOS
+    # they are Geode's own re-implementation of the old ABI and must not be copied.
+    def guarded(t, line):
+        if t.startswith("gd::"):
+            return ["#ifdef GEODE_IS_WINDOWS", line, "#endif"]
+        return [line]
+
     out.append("    cocos2d::CCPoint position;")
     out.append("    float rotation = 0.f;")
     for t, n in fields:
-        out.append(f"    {t} {n} {{}};")
+        out.extend(guarded(t, f"    {t} {n} {{}};"))
     out.append("")
     out.append("    void save(PlayerObject* p) {")
     out.append("        position = p->getPosition();")
     out.append("        rotation = p->getRotation();")
-    for _, n in fields:
-        out.append(f"        {n} = p->{n};")
+    for t, n in fields:
+        out.extend(guarded(t, f"        {n} = p->{n};"))
     out.append("    }")
     out.append("")
     out.append("    void apply(PlayerObject* p) const {")
-    for _, n in fields:
-        out.append(f"        p->{n} = {n};")
+    for t, n in fields:
+        out.extend(guarded(t, f"        p->{n} = {n};"))
     out.append("        p->setPosition(position);")
     out.append("        p->setRotation(rotation);")
     out.append("    }")

@@ -39,8 +39,12 @@ struct PlayerStateSnapshot {
     int m_collidingWithSlopeId {};
     bool m_slopeFlipGravityRelated {};
     float m_slopeAngleRadians {};
+#ifdef GEODE_IS_WINDOWS
     gd::unordered_map<int, GJPointDouble> m_rotateObjectsRelated {};
+#endif
+#ifdef GEODE_IS_WINDOWS
     gd::unordered_map<int, GameObject*> m_potentialSlopeMap {};
+#endif
     float m_rotationSpeed {};
     float m_rotateSpeed {};
     bool m_isRotating {};
@@ -77,7 +81,9 @@ struct PlayerStateSnapshot {
     double m_accelerationOrSpeed {};
     double m_snapDistance {};
     bool m_ringJumpRelated {};
+#ifdef GEODE_IS_WINDOWS
     gd::unordered_set<int> m_ringRelatedSet {};
+#endif
     int m_onFlyCheckpointTries {};
     bool m_maybeSpriteRelated {};
     bool m_useLandParticles0 {};
@@ -154,7 +160,9 @@ struct PlayerStateSnapshot {
     bool m_isLocked {};
     bool m_controlsDisabled {};
     cocos2d::CCPoint m_lastGroundedPos {};
+#ifdef GEODE_IS_WINDOWS
     gd::unordered_set<int> m_touchedRings {};
+#endif
     bool m_hasEverJumped {};
     bool m_hasEverHitRing {};
     cocos2d::CCPoint m_position {};
@@ -169,7 +177,9 @@ struct PlayerStateSnapshot {
     bool m_swapColors {};
     bool m_switchDashFireColor {};
     int m_followRelated {};
+#ifdef GEODE_IS_WINDOWS
     gd::vector<float> m_playerFollowFloats {};
+#endif
     float m_unk838 {};
     int m_stateOnGround {};
     unsigned char m_stateUnk {};
@@ -212,11 +222,15 @@ struct PlayerStateSnapshot {
     int m_stateForce {};
     cocos2d::CCPoint m_stateForceVector {};
     bool m_affectedByForces {};
+#ifdef GEODE_IS_WINDOWS
     gd::map<int, bool> m_jumpPadRelated {};
+#endif
     float m_lastMovedTime {};
     float m_playerSpeedAC {};
     bool m_fixRobotJump {};
+#ifdef GEODE_IS_WINDOWS
     gd::map<int, bool> m_holdingButtons {};
+#endif
     bool m_inputsLocked {};
     bool m_gv0123 {};
     int m_iconRequestID {};
@@ -266,8 +280,12 @@ struct PlayerStateSnapshot {
         m_collidingWithSlopeId = p->m_collidingWithSlopeId;
         m_slopeFlipGravityRelated = p->m_slopeFlipGravityRelated;
         m_slopeAngleRadians = p->m_slopeAngleRadians;
+#ifdef GEODE_IS_WINDOWS
         m_rotateObjectsRelated = p->m_rotateObjectsRelated;
+#endif
+#ifdef GEODE_IS_WINDOWS
         m_potentialSlopeMap = p->m_potentialSlopeMap;
+#endif
         m_rotationSpeed = p->m_rotationSpeed;
         m_rotateSpeed = p->m_rotateSpeed;
         m_isRotating = p->m_isRotating;
@@ -304,7 +322,9 @@ struct PlayerStateSnapshot {
         m_accelerationOrSpeed = p->m_accelerationOrSpeed;
         m_snapDistance = p->m_snapDistance;
         m_ringJumpRelated = p->m_ringJumpRelated;
+#ifdef GEODE_IS_WINDOWS
         m_ringRelatedSet = p->m_ringRelatedSet;
+#endif
         m_onFlyCheckpointTries = p->m_onFlyCheckpointTries;
         m_maybeSpriteRelated = p->m_maybeSpriteRelated;
         m_useLandParticles0 = p->m_useLandParticles0;
@@ -381,7 +401,9 @@ struct PlayerStateSnapshot {
         m_isLocked = p->m_isLocked;
         m_controlsDisabled = p->m_controlsDisabled;
         m_lastGroundedPos = p->m_lastGroundedPos;
+#ifdef GEODE_IS_WINDOWS
         m_touchedRings = p->m_touchedRings;
+#endif
         m_hasEverJumped = p->m_hasEverJumped;
         m_hasEverHitRing = p->m_hasEverHitRing;
         m_position = p->m_position;
@@ -396,7 +418,9 @@ struct PlayerStateSnapshot {
         m_swapColors = p->m_swapColors;
         m_switchDashFireColor = p->m_switchDashFireColor;
         m_followRelated = p->m_followRelated;
+#ifdef GEODE_IS_WINDOWS
         m_playerFollowFloats = p->m_playerFollowFloats;
+#endif
         m_unk838 = p->m_unk838;
         m_stateOnGround = p->m_stateOnGround;
         m_stateUnk = p->m_stateUnk;
@@ -439,11 +463,15 @@ struct PlayerStateSnapshot {
         m_stateForce = p->m_stateForce;
         m_stateForceVector = p->m_stateForceVector;
         m_affectedByForces = p->m_affectedByForces;
+#ifdef GEODE_IS_WINDOWS
         m_jumpPadRelated = p->m_jumpPadRelated;
+#endif
         m_lastMovedTime = p->m_lastMovedTime;
         m_playerSpeedAC = p->m_playerSpeedAC;
         m_fixRobotJump = p->m_fixRobotJump;
+#ifdef GEODE_IS_WINDOWS
         m_holdingButtons = p->m_holdingButtons;
+#endif
         m_inputsLocked = p->m_inputsLocked;
         m_gv0123 = p->m_gv0123;
         m_iconRequestID = p->m_iconRequestID;
@@ -492,8 +520,12 @@ struct PlayerStateSnapshot {
         p->m_collidingWithSlopeId = m_collidingWithSlopeId;
         p->m_slopeFlipGravityRelated = m_slopeFlipGravityRelated;
         p->m_slopeAngleRadians = m_slopeAngleRadians;
+#ifdef GEODE_IS_WINDOWS
         p->m_rotateObjectsRelated = m_rotateObjectsRelated;
+#endif
+#ifdef GEODE_IS_WINDOWS
         p->m_potentialSlopeMap = m_potentialSlopeMap;
+#endif
         p->m_rotationSpeed = m_rotationSpeed;
         p->m_rotateSpeed = m_rotateSpeed;
         p->m_isRotating = m_isRotating;
@@ -530,7 +562,9 @@ struct PlayerStateSnapshot {
         p->m_accelerationOrSpeed = m_accelerationOrSpeed;
         p->m_snapDistance = m_snapDistance;
         p->m_ringJumpRelated = m_ringJumpRelated;
+#ifdef GEODE_IS_WINDOWS
         p->m_ringRelatedSet = m_ringRelatedSet;
+#endif
         p->m_onFlyCheckpointTries = m_onFlyCheckpointTries;
         p->m_maybeSpriteRelated = m_maybeSpriteRelated;
         p->m_useLandParticles0 = m_useLandParticles0;
@@ -607,7 +641,9 @@ struct PlayerStateSnapshot {
         p->m_isLocked = m_isLocked;
         p->m_controlsDisabled = m_controlsDisabled;
         p->m_lastGroundedPos = m_lastGroundedPos;
+#ifdef GEODE_IS_WINDOWS
         p->m_touchedRings = m_touchedRings;
+#endif
         p->m_hasEverJumped = m_hasEverJumped;
         p->m_hasEverHitRing = m_hasEverHitRing;
         p->m_position = m_position;
@@ -622,7 +658,9 @@ struct PlayerStateSnapshot {
         p->m_swapColors = m_swapColors;
         p->m_switchDashFireColor = m_switchDashFireColor;
         p->m_followRelated = m_followRelated;
+#ifdef GEODE_IS_WINDOWS
         p->m_playerFollowFloats = m_playerFollowFloats;
+#endif
         p->m_unk838 = m_unk838;
         p->m_stateOnGround = m_stateOnGround;
         p->m_stateUnk = m_stateUnk;
@@ -665,11 +703,15 @@ struct PlayerStateSnapshot {
         p->m_stateForce = m_stateForce;
         p->m_stateForceVector = m_stateForceVector;
         p->m_affectedByForces = m_affectedByForces;
+#ifdef GEODE_IS_WINDOWS
         p->m_jumpPadRelated = m_jumpPadRelated;
+#endif
         p->m_lastMovedTime = m_lastMovedTime;
         p->m_playerSpeedAC = m_playerSpeedAC;
         p->m_fixRobotJump = m_fixRobotJump;
+#ifdef GEODE_IS_WINDOWS
         p->m_holdingButtons = m_holdingButtons;
+#endif
         p->m_inputsLocked = m_inputsLocked;
         p->m_gv0123 = m_gv0123;
         p->m_iconRequestID = m_iconRequestID;

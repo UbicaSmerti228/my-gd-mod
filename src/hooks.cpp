@@ -193,7 +193,11 @@ class $modify(BotPlayLayer, PlayLayer) {
             if (auto players = typeinfo_cast<PlayerStateHolder*>(checkpoint->getUserObject("players"_spr))) {
                 if (m_player1) players->p1.apply(m_player1);
                 if (m_player2) players->p2.apply(m_player2);
+#ifdef GEODE_IS_WINDOWS
+                // Held buttons are part of the snapshot only on Windows (see PlayerState.gen.hpp);
+                // elsewhere they are pressed again after the reset.
                 bot.restoredPlayers = true;
+#endif
             }
         }
     }
