@@ -3,7 +3,7 @@
 
 #include <Geode/Geode.hpp>
 
-// 224 plain-value fields of PlayerObject, plus its position and rotation.
+// 223 plain-value fields of PlayerObject, plus its position and rotation.
 struct PlayerStateSnapshot {
     cocos2d::CCPoint position;
     float rotation = 0.f;
@@ -31,7 +31,6 @@ struct PlayerStateSnapshot {
     double m_groundYVelocity {};
     double m_yVelocityRelated {};
     double m_scaleXRelated3 {};
-    bool m_collidingBetweenSteps {};
     double m_scaleXRelated4 {};
     double m_scaleXRelated5 {};
     bool m_isCollidingWithSlope {};
@@ -259,7 +258,6 @@ struct PlayerStateSnapshot {
         m_groundYVelocity = p->m_groundYVelocity;
         m_yVelocityRelated = p->m_yVelocityRelated;
         m_scaleXRelated3 = p->m_scaleXRelated3;
-        m_collidingBetweenSteps = p->m_collidingBetweenSteps;
         m_scaleXRelated4 = p->m_scaleXRelated4;
         m_scaleXRelated5 = p->m_scaleXRelated5;
         m_isCollidingWithSlope = p->m_isCollidingWithSlope;
@@ -486,7 +484,6 @@ struct PlayerStateSnapshot {
         p->m_groundYVelocity = m_groundYVelocity;
         p->m_yVelocityRelated = m_yVelocityRelated;
         p->m_scaleXRelated3 = m_scaleXRelated3;
-        p->m_collidingBetweenSteps = m_collidingBetweenSteps;
         p->m_scaleXRelated4 = m_scaleXRelated4;
         p->m_scaleXRelated5 = m_scaleXRelated5;
         p->m_isCollidingWithSlope = m_isCollidingWithSlope;

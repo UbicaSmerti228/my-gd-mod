@@ -28,7 +28,19 @@ def main():
     end = bro.index("\n}", start)
     body = bro[start:end]
     fields = []
+    # Fields inside "android, ios { ... }" style blocks only exist on those platforms;
+    # this mod builds for Windows.
+    platform_block = None
     for line in body.splitlines():
+        block = re.match(r"^\s+([a-z0-9, ]+)\s*\{\s*$", line)
+        if block:
+            platform_block = [p.strip() for p in block.group(1).split(",")]
+            continue
+        if platform_block is not None and re.match(r"^\s+\}\s*$", line):
+            platform_block = None
+            continue
+        if platform_block is not None and "win" not in platform_block:
+            continue
         m = re.match(r"^\s+([A-Za-z_:][A-Za-z0-9_:<>, \*]*?)\s+(m_[A-Za-z0-9_]+);\s*(//.*)?$", line)
         if not m:
             continue
