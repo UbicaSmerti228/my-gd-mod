@@ -252,7 +252,7 @@ void FrameHud::spawnMarker(size_t index, int category) {
     CCPoint verts[SEGMENTS];
     for (int i = 0; i < SEGMENTS; ++i) {
         float angle = i * 6.2831853f / SEGMENTS;
-        verts[i] = { RADIUS * std::cos(angle), RADIUS * std::sin(angle) };
+        verts[i] = CCPoint(RADIUS * std::cos(angle), RADIUS * std::sin(angle));
     }
     auto ring = CCDrawNode::create();
     ring->drawPolygon(verts, SEGMENTS, { 0.f, 0.f, 0.f, 0.f }, 4.f, { 0.f, 0.f, 0.f, 1.f });
