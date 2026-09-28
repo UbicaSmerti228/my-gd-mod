@@ -5,10 +5,15 @@
 	},
 	"id": "ubicasmerti228.ill-replay-bot",
 	"name": "ILL Replay Bot",
-	"version": "v1.0.0",
+	"version": "v1.1.0",
 	"developer": "UbicaSmerti228",
-	"description": "Tick-accurate replay bot for Impossible Levels List showcases",
+	"description": "Tick-accurate replay bot and frame window analyzer for ILL showcases",
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
+	},
+	"resources": {
+		"files": [
+			"resources/sounds/*.wav"
+		]
 	}
 }

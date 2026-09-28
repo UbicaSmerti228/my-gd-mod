@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -19,13 +20,47 @@ struct BotInput {
     bool down;
 };
 
+// Result of the frame window analysis for one input.
+struct InputAnalysis {
+    // How many ticks the input can be moved earlier / later and still work.
+    int left = 0;
+    int right = 0;
+    bool analyzed = false;
+    // The search stopped at the configured maximum, the real window may be wider.
+    bool capped = false;
+    // Replaying this input unchanged did not reproduce the reference run, so the
+    // window for it cannot be trusted.
+    bool unreliable = false;
+
+    int window() const { return left + right + 1; }
+};
+
+struct PlayerState {
+    float x = 0.f;
+    float y = 0.f;
+    double yVelocity = 0.0;
+};
+
+struct TickState {
+    PlayerState p1;
+    PlayerState p2;
+    bool valid = false;
+};
+
 struct Replay {
     int levelID = 0;
     std::string levelName;
     int tps = 0;
     std::vector<BotInput> inputs;
+    // Parallel to `inputs` once an analysis has been run, empty otherwise.
+    std::vector<InputAnalysis> analysis;
+    // Running L* and difficulty share after each input, parallel to `inputs`.
+    std::vector<double> lstar;
+    std::vector<double> lstarShare;
 
     uint32_t lastTick() const { return inputs.empty() ? 0 : inputs.back().tick; }
+    bool hasAnalysis() const { return !analysis.empty() && analysis.size() == inputs.size(); }
+    int effectiveTps() const { return tps > 0 ? tps : 240; }
 };
 
 class Bot {
@@ -42,20 +77,40 @@ public:
     // Set while the bot itself calls handleButton, so the hook lets it through.
     bool injecting = false;
 
+    // While the analyzer runs, playback uses its modified copy of the inputs.
+    bool analyzing = false;
+    std::vector<BotInput> simInputs;
+    std::vector<BotInput> const& playbackInputs() const { return analyzing ? simInputs : replay.inputs; }
+
+    // Player states per tick from the last clean playback, used for the
+    // future / past trajectory lines.
+    std::vector<TickState> track;
+
     float speed = 1.f;
     bool showOverlay = true;
+    // Frame window counter, CPS and L* labels, and ring markers.
+    bool showCounter = true;
+    // Past / future / alternative trajectory lines.
+    bool showPaths = true;
+    bool playSounds = true;
 
     // Measured physics rate: ticks per second of level time.
     int measuredTps = 0;
 
+    // Called on the main thread whenever playback applies input `index`.
+    std::function<void(size_t index)> onInputPlayed;
+
     void setMode(BotMode mode);
     void setSpeed(float speed);
+    void clearAnalysis();
 
     void onLevelStart(GJGameLevel* level);
     void onReset(GJBaseGameLayer* layer);
     void onTickStart(GJBaseGameLayer* layer);
     void onTickEnd(GJBaseGameLayer* layer);
     void record(bool down, int button, bool player1);
+
+    static TickState captureState(GJBaseGameLayer* layer);
 
     // Replays live in <save dir>/replays/<name>.ilr
     static std::filesystem::path replayDir();

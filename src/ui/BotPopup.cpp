@@ -1,4 +1,6 @@
 #include "BotPopup.hpp"
+#include "../analysis/Analyzer.hpp"
+#include "../analysis/LStar.hpp"
 
 #include <Geode/ui/SliderNode.hpp>
 #include <fmt/format.h>
@@ -7,7 +9,7 @@ using namespace geode::prelude;
 
 namespace {
     constexpr float WIDTH = 400.f;
-    constexpr float HEIGHT = 280.f;
+    constexpr float HEIGHT = 320.f;
     constexpr float LIST_WIDTH = 180.f;
     constexpr float LIST_HEIGHT = 108.f;
 
@@ -53,25 +55,25 @@ bool BotPopup::init() {
     this->buildModeTabs();
 
     // Status panel
-    auto infoPanel = makePanel({ WIDTH - 30.f, 36.f });
-    m_mainLayer->addChildAtPosition(infoPanel, Anchor::Top, { 0.f, -92.f });
+    auto infoPanel = makePanel({ WIDTH - 30.f, 50.f });
+    m_mainLayer->addChildAtPosition(infoPanel, Anchor::Top, { 0.f, -100.f });
     m_infoLabel = CCLabelBMFont::create("", "chatFont.fnt");
-    m_infoLabel->setScale(0.7f);
+    m_infoLabel->setScale(0.62f);
     m_infoLabel->setAlignment(kCCTextAlignmentCenter);
-    m_mainLayer->addChildAtPosition(m_infoLabel, Anchor::Top, { 0.f, -92.f });
+    m_mainLayer->addChildAtPosition(m_infoLabel, Anchor::Top, { 0.f, -100.f });
 
     // Left column: saved replays
-    m_mainLayer->addChildAtPosition(makeCaption("Saved replays"), Anchor::BottomLeft, { 110.f, 150.f });
+    m_mainLayer->addChildAtPosition(makeCaption("Saved replays"), Anchor::BottomLeft, { 110.f, 178.f });
     auto listPanel = makePanel({ LIST_WIDTH + 10.f, LIST_HEIGHT + 8.f });
-    m_mainLayer->addChildAtPosition(listPanel, Anchor::BottomLeft, { 110.f, 82.f });
+    m_mainLayer->addChildAtPosition(listPanel, Anchor::BottomLeft, { 110.f, 110.f });
     m_list = ScrollLayer::create({ LIST_WIDTH, LIST_HEIGHT });
     m_list->m_contentLayer->setLayout(ScrollLayer::createDefaultListLayout(2.f));
-    m_list->setPosition({ 110.f - LIST_WIDTH / 2.f, 82.f - LIST_HEIGHT / 2.f });
+    m_list->setPosition({ 110.f - LIST_WIDTH / 2.f, 110.f - LIST_HEIGHT / 2.f });
     m_mainLayer->addChild(m_list);
 
-    // Right column: save, speed, overlay
+    // Right column: save, speed, analysis
     auto rightX = 300.f;
-    m_mainLayer->addChildAtPosition(makeCaption("Save current"), Anchor::BottomLeft, { rightX, 150.f });
+    m_mainLayer->addChildAtPosition(makeCaption("Save current"), Anchor::BottomLeft, { rightX, 178.f });
 
     m_nameInput = TextInput::create(150.f, "replay name");
     m_nameInput->setFilter("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-.");
@@ -80,7 +82,7 @@ bool BotPopup::init() {
     if (auto pl = PlayLayer::get(); pl && pl->m_level) {
         m_nameInput->setString(pl->m_level->m_levelName.c_str());
     }
-    m_mainLayer->addChildAtPosition(m_nameInput, Anchor::BottomLeft, { rightX, 126.f });
+    m_mainLayer->addChildAtPosition(m_nameInput, Anchor::BottomLeft, { rightX, 154.f });
 
     auto saveBtn = CCMenuItemExt::createSpriteExtra(
         ButtonSprite::create("Save", 80, 0, 0.7f, true, "bigFont.fnt", "GJ_button_01.png", 26.f),
@@ -92,11 +94,11 @@ bool BotPopup::init() {
             this->refreshList();
         }
     );
-    m_buttonMenu->addChildAtPosition(saveBtn, Anchor::BottomLeft, { rightX, 98.f });
+    m_buttonMenu->addChildAtPosition(saveBtn, Anchor::BottomLeft, { rightX, 126.f });
 
     m_speedLabel = CCLabelBMFont::create("", "bigFont.fnt");
     m_speedLabel->setScale(0.4f);
-    m_mainLayer->addChildAtPosition(m_speedLabel, Anchor::BottomLeft, { rightX, 72.f });
+    m_mainLayer->addChildAtPosition(m_speedLabel, Anchor::BottomLeft, { rightX, 102.f });
 
     auto slider = SliderNode::create([this](SliderNode*, float value) {
         Bot::get().setSpeed(value);
@@ -107,31 +109,64 @@ bool BotPopup::init() {
     slider->setSnapStep(0.05f);
     slider->setValue(Bot::get().speed);
     slider->setScale(0.7f);
-    m_mainLayer->addChildAtPosition(slider, Anchor::BottomLeft, { rightX, 54.f });
+    m_mainLayer->addChildAtPosition(slider, Anchor::BottomLeft, { rightX, 84.f });
     m_speedLabel->setString(fmt::format("Speed x{:.2f}", Bot::get().speed).c_str());
 
-    // Bottom row
-    auto overlayToggle = CCMenuItemExt::createTogglerWithStandardSprites(0.6f, [](CCMenuItemToggler* toggler) {
-        // The callback runs before the toggle flips its state.
-        auto& bot = Bot::get();
-        bot.showOverlay = !toggler->isToggled();
-        Mod::get()->setSavedValue("show-overlay", bot.showOverlay);
-    });
-    overlayToggle->toggle(Bot::get().showOverlay);
-    m_buttonMenu->addChildAtPosition(overlayToggle, Anchor::BottomLeft, { 30.f, 18.f });
-    auto overlayLabel = CCLabelBMFont::create("TPS / bot label on screen", "bigFont.fnt");
-    overlayLabel->setScale(0.3f);
-    overlayLabel->setAnchorPoint({ 0.f, 0.5f });
-    m_mainLayer->addChildAtPosition(overlayLabel, Anchor::BottomLeft, { 45.f, 18.f });
+    bool analyzing = Analyzer::get().isActive();
+    auto analyzeBtn = CCMenuItemExt::createSpriteExtra(
+        ButtonSprite::create(
+            analyzing ? "Stop analysis" : "Analyze windows", 150, 0, 0.5f, true, "bigFont.fnt",
+            analyzing ? "GJ_button_06.png" : "GJ_button_03.png", 28.f
+        ),
+        [this](CCMenuItemSpriteExtra*) {
+            auto& analyzer = Analyzer::get();
+            if (analyzer.isActive()) {
+                analyzer.cancel(PlayLayer::get());
+                return this->onClose(nullptr);
+            }
+            auto res = analyzer.start(PlayLayer::get());
+            if (!res) return this->notify(res.unwrapErr(), false);
+            this->notify("Resume the game: the analysis runs in the level (may take a few minutes)", true);
+            this->onClose(nullptr);
+        }
+    );
+    m_buttonMenu->addChildAtPosition(analyzeBtn, Anchor::BottomLeft, { rightX, 54.f });
+
+    // Bottom row: display toggles and the replay folder
+    struct Toggle { char const* label; char const* key; bool Bot::* field; };
+    Toggle toggles[] = {
+        { "Label", "show-overlay", &Bot::showOverlay },
+        { "Counter", "show-counter", &Bot::showCounter },
+        { "Paths", "show-paths", &Bot::showPaths },
+        { "Sounds", "play-sounds", &Bot::playSounds },
+    };
+    float x = 18.f;
+    for (auto const& t : toggles) {
+        auto field = t.field;
+        std::string key = t.key;
+        auto toggler = CCMenuItemExt::createTogglerWithStandardSprites(0.55f, [field, key](CCMenuItemToggler* toggler) {
+            // The callback runs before the toggle flips its state.
+            auto& bot = Bot::get();
+            bot.*field = !toggler->isToggled();
+            Mod::get()->setSavedValue(key, bot.*field);
+        });
+        toggler->toggle(Bot::get().*field);
+        m_buttonMenu->addChildAtPosition(toggler, Anchor::BottomLeft, { x, 20.f });
+        auto label = CCLabelBMFont::create(t.label, "bigFont.fnt");
+        label->setScale(0.28f);
+        label->setAnchorPoint({ 0.f, 0.5f });
+        m_mainLayer->addChildAtPosition(label, Anchor::BottomLeft, { x + 13.f, 20.f });
+        x += 80.f;
+    }
 
     auto folderBtn = CCMenuItemExt::createSpriteExtra(
-        ButtonSprite::create("Folder", 70, 0, 0.5f, true, "bigFont.fnt", "GJ_button_04.png", 22.f),
+        ButtonSprite::create("Folder", 60, 0, 0.45f, true, "bigFont.fnt", "GJ_button_04.png", 22.f),
         [](CCMenuItemSpriteExtra*) {
             (void)file::createDirectoryAll(Bot::replayDir());
             file::openFolder(Bot::replayDir());
         }
     );
-    m_buttonMenu->addChildAtPosition(folderBtn, Anchor::BottomRight, { -50.f, 18.f });
+    m_buttonMenu->addChildAtPosition(folderBtn, Anchor::BottomRight, { -40.f, 20.f });
 
     this->refreshInfo();
     this->refreshList();
@@ -208,9 +243,27 @@ void BotPopup::refreshInfo() {
     auto level = replay.levelName.empty() ? std::string("no replay loaded") : replay.levelName;
     auto tps = replay.tps ? fmt::format("{} TPS", replay.tps) : std::string("TPS not measured yet");
 
+    std::string analysis;
+    if (Analyzer::get().isActive()) {
+        analysis = Analyzer::get().statusText();
+    }
+    else if (replay.hasAnalysis()) {
+        size_t counted = 0, unreliable = 0;
+        for (auto const& a : replay.analysis) {
+            counted += a.analyzed && !a.unreliable ? 1 : 0;
+            unreliable += a.unreliable ? 1 : 0;
+        }
+        auto lstar = !replay.lstar.empty() ? fmt::format("L* {:.2f}", replay.lstar.back())
+            : LStar::isComputing() ? std::string("L* computing...") : std::string("L* --");
+        analysis = fmt::format("Windows: {} analyzed, {} unreliable   |   {}", counted, unreliable, lstar);
+    }
+    else {
+        analysis = "Windows not analyzed yet";
+    }
+
     m_infoLabel->setString(fmt::format(
-        "Mode: {}   |   {}\n{} inputs   |   {} ticks   |   {}",
-        modeName, level, replay.inputs.size(), replay.lastTick(), tps
+        "Mode: {}   |   {}\n{} inputs   |   {} ticks   |   {}\n{}",
+        modeName, level, replay.inputs.size(), replay.lastTick(), tps, analysis
     ).c_str());
 }
 

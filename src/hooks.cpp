@@ -1,4 +1,6 @@
 #include "Bot.hpp"
+#include "analysis/Analyzer.hpp"
+#include "hud/FrameHud.hpp"
 #include "ui/BotPopup.hpp"
 
 #include <Geode/modify/CCScheduler.hpp>
@@ -18,7 +20,7 @@ namespace {
 
     // With the bot in use nothing gets saved: no stars, no new best, no completion.
     void applySafeMode(GJBaseGameLayer* layer) {
-        if (Bot::get().mode != BotMode::Off) layer->m_isTestMode = true;
+        if (Bot::get().mode != BotMode::Off || Bot::get().analyzing) layer->m_isTestMode = true;
     }
 }
 
@@ -28,8 +30,8 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
         if (!isBotLayer(this) || bot.injecting) {
             return GJBaseGameLayer::handleButton(down, button, isPlayer1);
         }
-        // During playback the player's own clicks are ignored.
-        if (bot.mode == BotMode::Play) return;
+        // During playback and analysis the player's own clicks are ignored.
+        if (bot.mode == BotMode::Play || bot.analyzing) return;
         if (bot.mode == BotMode::Record) bot.record(down, button, isPlayer1);
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
     }
@@ -43,26 +45,51 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
         bot.onTickEnd(this);
     }
+
+    void update(float dt) {
+        auto& analyzer = Analyzer::get();
+        if (isBotLayer(this) && analyzer.isActive()) {
+            analyzer.drive(static_cast<PlayLayer*>(static_cast<GJBaseGameLayer*>(this)), [this](float step) {
+                GJBaseGameLayer::update(step);
+            });
+            return;
+        }
+        GJBaseGameLayer::update(dt);
+    }
 };
 
 class $modify(BotPlayLayer, PlayLayer) {
     struct Fields {
         CCLabelBMFont* overlay = nullptr;
+        FrameHud* hud = nullptr;
     };
+
+    static FrameHud* currentHud() {
+        auto pl = PlayLayer::get();
+        return pl ? static_cast<BotPlayLayer*>(pl)->m_fields->hud : nullptr;
+    }
 
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         Bot::get().onLevelStart(level);
         if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
 
-        auto winSize = CCDirector::get()->getWinSize();
         auto label = CCLabelBMFont::create("", "bigFont.fnt");
-        label->setAnchorPoint({ 0.f, 0.f });
-        label->setScale(0.35f);
+        label->setAnchorPoint({ 1.f, 0.f });
+        label->setScale(0.3f);
         label->setOpacity(210);
-        label->setPosition({ 6.f, 4.f });
-        label->setZOrder(1000);
+        label->setPosition({ CCDirector::get()->getWinSize().width - 6.f, 4.f });
         label->setID("overlay"_spr);
-        this->addChild(label);
+
+        auto hud = FrameHud::create(this);
+        m_fields->hud = hud;
+        if (m_uiLayer) {
+            m_uiLayer->addChild(hud, 9999);
+            m_uiLayer->addChild(label, 10000);
+        }
+        else {
+            this->addChild(hud, 9999);
+            this->addChild(label, 10000);
+        }
         m_fields->overlay = label;
 
         this->schedule(schedule_selector(BotPlayLayer::updateOverlay), 0.1f);
@@ -78,14 +105,16 @@ class $modify(BotPlayLayer, PlayLayer) {
         bot.tick = 0;
         PlayLayer::resetLevel();
         bot.onReset(this);
+        if (auto hud = m_fields->hud) hud->resetTo(bot.tick);
         applySafeMode(this);
     }
 
-    void storeCheckpoint(CheckpointObject* checkpoint) {
-        PlayLayer::storeCheckpoint(checkpoint);
+    CheckpointObject* createCheckpoint() {
+        auto checkpoint = PlayLayer::createCheckpoint();
         if (checkpoint) {
             checkpoint->setUserObject("tick"_spr, CCInteger::create(static_cast<int>(Bot::get().tick)));
         }
+        return checkpoint;
     }
 
     void loadFromCheckpoint(CheckpointObject* checkpoint) {
@@ -97,16 +126,25 @@ class $modify(BotPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
+        if (Analyzer::get().isActive()) {
+            // Reaching the end during analysis counts as surviving; the level is not finished.
+            return Analyzer::get().onComplete();
+        }
         applySafeMode(this);
         PlayLayer::levelComplete();
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
+        // The anti-cheat spike always goes through to the game.
+        if (Analyzer::get().isActive() && object != m_anticheatSpike) {
+            return Analyzer::get().onDeath();
+        }
         applySafeMode(this);
         PlayLayer::destroyPlayer(player, object);
     }
 
     void onQuit() {
+        Analyzer::get().cancel(nullptr);
         // Leave the rest of the game at normal speed and pitch.
         if (auto engine = FMODAudioEngine::get(); engine && engine->m_globalChannel) {
             engine->m_globalChannel->setPitch(1.f);
@@ -118,6 +156,14 @@ class $modify(BotPlayLayer, PlayLayer) {
         auto label = m_fields->overlay;
         if (!label) return;
         auto& bot = Bot::get();
+        auto& analyzer = Analyzer::get();
+
+        if (analyzer.isActive()) {
+            label->setVisible(true);
+            label->setString(analyzer.statusText().c_str());
+            label->setColor({ 255, 220, 90 });
+            return;
+        }
         if (!bot.showOverlay) {
             label->setVisible(false);
             return;
@@ -144,6 +190,12 @@ class $modify(BotPlayLayer, PlayLayer) {
         }
     }
 };
+
+$execute {
+    Bot::get().onInputPlayed = [](size_t index) {
+        if (auto hud = BotPlayLayer::currentHud()) hud->onInputPlayed(index);
+    };
+}
 
 class $modify(BotPauseLayer, PauseLayer) {
     void customSetup() {
@@ -176,7 +228,7 @@ class $modify(BotPauseLayer, PauseLayer) {
 class $modify(BotScheduler, CCScheduler) {
     void update(float dt) {
         auto& bot = Bot::get();
-        if (bot.speed != 1.f && PlayLayer::get()) dt *= bot.speed;
+        if (bot.speed != 1.f && PlayLayer::get() && !Analyzer::get().isActive()) dt *= bot.speed;
         CCScheduler::update(dt);
     }
 };
