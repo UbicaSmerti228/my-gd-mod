@@ -1,0 +1,6 @@
+data_cache/
+__pycache__/
+.pytest_cache/
+reports/binance/
+reports/bybit/
+reports/okx/
