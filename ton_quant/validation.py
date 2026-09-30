@@ -32,6 +32,9 @@ def fold_bounds(n: int, train: int, test: int, step: int) -> list[tuple[int, int
     while s + train + test <= n:
         out.append((s, s + train, s + train + test))
         s += step
+    if out and out[-1][2] < n and n - out[-1][2] >= test // 4:   # хвост истории — укороченный последний фолд
+        s = out[-1][0] + step
+        out.append((s, s + train, n))
     if not out and n > train:            # короткая история: один фолд с остатком
         out.append((0, train, n))
     return out

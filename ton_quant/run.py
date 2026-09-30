@@ -180,8 +180,8 @@ def main(argv=None):
 
     # бенчмарк на том же OOS-отрезке
     any_wf = next(iter(wfs.values()))
-    oos_start = any_wf.oos.equity.index[0]
-    bh = buy_and_hold(df.loc[oos_start:], args.tf, funding, cfg.costs, cfg.risk)
+    oos_start, oos_end = any_wf.oos.equity.index[0], any_wf.oos.equity.index[-1]
+    bh = buy_and_hold(df.loc[oos_start:oos_end], args.tf, funding, cfg.costs, cfg.risk)
     bh_ret = daily_returns(bh.equity)
     curves = {"Buy&Hold perp 1x": bh.equity}
     summary = {"Buy&Hold perp 1x": metrics(bh)}
@@ -196,7 +196,7 @@ def main(argv=None):
         rc_bh = whites_reality_check(R_all, bh_ret, 500 if args.fast else 2000, cfg.bootstrap_block)
         mc = monte_carlo(wf.oos, cfg.mc_sims)
         ci = sharpe_ci(r, 500 if args.fast else 2000, cfg.bootstrap_block)
-        rnd = (random_entries(df.loc[oos_start:], f.loc[oos_start:], funding, cfg, wf.oos, cfg.random_entry_sims)
+        rnd = (random_entries(df.loc[oos_start:oos_end], f.loc[oos_start:oos_end], funding, cfg, wf.oos, cfg.random_entry_sims)
                if m["Trades"] >= 5 else {"note": "мало сделок"})
         ok, checks = edge_verdict(m, dsr, rc_cash.get("p_value", np.nan), rnd, mc)
         verdicts[name] = (ok, checks)

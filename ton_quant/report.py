@@ -40,7 +40,8 @@ def plot_equity(curves: dict[str, pd.Series], path: str, title: str) -> str:
         ax.plot(s.index, s / s.iloc[0], label=name, color=SERIES[k % len(SERIES)] if k < 8 else MUTED,
                 lw=2.2 if name.startswith("Buy") else 1.4)
     ax.set_yscale("log"); ax.set_ylabel("капитал, x (лог. шкала)")
-    ax.set_title(title, loc="left"); ax.legend(ncol=4, loc="upper left")
+    ax.set_title(title, loc="left")
+    ax.legend(ncol=6, loc="upper center", bbox_to_anchor=(0.5, -0.12))
     return _save(fig, path)
 
 
@@ -48,7 +49,8 @@ def plot_drawdown(curves: dict[str, pd.Series], path: str) -> str:
     fig, ax = plt.subplots(figsize=(10, 3))
     for k, (name, s) in enumerate(curves.items()):
         ax.plot(s.index, (s / s.cummax() - 1) * 100, label=name, color=SERIES[k % len(SERIES)], lw=1.2)
-    ax.set_ylabel("просадка, %"); ax.set_title("Просадки (OOS)", loc="left"); ax.legend(ncol=4)
+    ax.set_ylabel("просадка, %"); ax.set_title("Просадки (OOS)", loc="left")
+    ax.legend(ncol=6, loc="upper center", bbox_to_anchor=(0.5, -0.15))
     return _save(fig, path)
 
 
