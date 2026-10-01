@@ -55,6 +55,7 @@ Result<> RouteFinder::start(PlayLayer* layer) {
     if (!layer) return Err("Open the level first");
     if (layer->m_isPlatformer) return Err("Platformer levels are not supported");
     auto& bot = Bot::get();
+    geode::log::info("ILL: route search starting");
     this->preparePractice(layer);
     bot.mode = BotMode::Play;
     bot.analyzing = true;
@@ -72,6 +73,7 @@ void RouteFinder::drive(PlayLayer* layer, std::function<void(float)> const& step
     auto& bot = Bot::get();
 
     if (m_phase == Phase::Starting) {
+        geode::log::info("ILL: route search: first update");
         this->enterSimulation(layer);
         m_twoPlayerLevel = layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
         m_path.clear();
@@ -174,6 +176,7 @@ void RouteFinder::runForward(PlayLayer*, bool fromStart) {
 }
 
 void RouteFinder::startSearch(PlayLayer* layer, uint32_t death) {
+    geode::log::info("ILL: route search: died at tick {}, searching a fix", death);
     m_obstacle = death;
     m_successTick = death + SUCCESS_MARGIN;
     m_depth = 1;

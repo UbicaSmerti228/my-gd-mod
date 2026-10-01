@@ -28,6 +28,8 @@ void SimController::repressHeld(GJBaseGameLayer* layer) {
 }
 
 void SimController::restore(PlayLayer* layer, CheckpointObject* checkpoint) {
+    static size_t s_restores = 0;
+    if (++s_restores <= 5) geode::log::info("ILL: restore #{} (checkpoint {})", s_restores, static_cast<void*>(checkpoint));
     Bot::get().injecting = false;
     Bot::get().splits.clear();
     layer->m_checkpointArray->removeAllObjects();
@@ -48,11 +50,13 @@ uint32_t SimController::stepOnce(PlayLayer* layer, std::function<void(float)> co
 
 void SimController::preparePractice(PlayLayer* layer) {
     // The simulations restore the level from checkpoints, which the game only does in
-    // practice mode. Switching it on restarts the level, which is safe from a menu
-    // (this is what the pause menu's own practice switch does) but crashed when done
-    // from inside the game update, so it is done here, when the simulation is started.
+    // practice mode. The game's own practice switch (togglePracticeMode) restarts the
+    // level and rebuilds the practice interface, and it crashed in both places it was
+    // tried, so only the flag is set: nothing is shown, and the level itself is
+    // restarted by the simulation as it does for every restore.
     m_wasPractice = layer->m_isPracticeMode;
-    if (!m_wasPractice) layer->togglePracticeMode(true);
+    layer->m_isPracticeMode = true;
+    geode::log::info("ILL: simulation prepared (practice flag set, was {})", m_wasPractice);
 }
 
 void SimController::enterSimulation(PlayLayer*) {
@@ -73,14 +77,9 @@ void SimController::leaveSimulation(PlayLayer* layer) {
     m_entered = false;
     if (layer) {
         layer->m_checkpointArray->removeAllObjects();
-        // Practice mode is not switched off again here: that restarts the level through
-        // the game's practice switch, which must not run inside the game update. The
-        // level just restarts from the start.
+        layer->m_isPracticeMode = m_wasPractice;
         layer->resetLevel();
-        if (!m_wasPractice) {
-            Notification::create("Practice mode is on now (the simulation needs it); switch it off in the pause menu",
-                NotificationIcon::Info, 4.f)->show();
-        }
+        geode::log::info("ILL: simulation left");
     }
     if (auto engine = FMODAudioEngine::get(); engine && engine->m_globalChannel) {
         engine->m_globalChannel->setVolume(m_oldVolume);

@@ -125,6 +125,7 @@ void Analyzer::drive(PlayLayer* layer, std::function<void(float)> const& step) {
     auto& bot = Bot::get();
 
     if (m_phase == Phase::Starting) {
+        geode::log::info("ILL: analysis: first update");
         this->enterSimulation(layer);
         m_stalledFrames = 0;
         this->beginReference(layer);

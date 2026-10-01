@@ -7,7 +7,7 @@
 	},
 	"id": "ubicasmerti228.ill-replay-bot",
 	"name": "ILL Replay Bot",
-	"version": "v1.1.1",
+	"version": "v1.1.2",
 	"developer": "UbicaSmerti228",
 	"description": "Tick-accurate replay bot and frame window analyzer for ILL showcases",
 	"dependencies": {

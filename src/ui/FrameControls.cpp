@@ -117,9 +117,10 @@ void FrameControls::rewind() {
     auto& bot = Bot::get();
     if (bot.mode != BotMode::Record) return;
     if (!m_layer->m_isPracticeMode) {
-        // Rewinding restarts at a checkpoint, which the game only allows in practice.
-        m_layer->togglePracticeMode(true);
-        Notification::create("Practice mode on: rewind points are kept from now on", NotificationIcon::Info)->show();
+        // Rewinding restarts at a checkpoint, which the game only does in practice mode:
+        // the flag is set (the game's own switch restarts the level and is avoided).
+        m_layer->m_isPracticeMode = true;
+        Notification::create("Rewind points are kept from now on, press rewind again", NotificationIcon::Info)->show();
         return;
     }
     if (m_history.empty()) {
