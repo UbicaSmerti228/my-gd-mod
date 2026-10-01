@@ -244,13 +244,13 @@ def probabilistic_sharpe(sr: float, sr_bench: float, T: int, sk: float, ku: floa
     return float(norm.cdf((sr - sr_bench) * np.sqrt(T - 1) / den))
 
 
-def deflated_sharpe(returns: pd.Series, trial_sharpes: np.ndarray) -> dict:
+def deflated_sharpe(returns: pd.Series, trial_sharpes: np.ndarray, n_trials: int | None = None) -> dict:
     """DSR: PSR против порога SR0, ожидаемого максимума Sharpe среди N испытаний без edge."""
     r = returns.dropna().to_numpy()
     T = len(r)
     tsr = np.asarray(trial_sharpes, float)
     tsr = tsr[np.isfinite(tsr)]
-    N = max(len(tsr), 1)
+    N = max(n_trials or len(tsr), 1)   # n_trials: все испытания проекта, а не только этого прогона
     if T < 30 or r.std() == 0:
         return {"DSR": np.nan, "note": "мало наблюдений"}
     sr = r.mean() / r.std()
