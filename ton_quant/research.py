@@ -144,7 +144,7 @@ def test_lead_lag(ton15: pd.DataFrame, btc15: pd.DataFrame, cfg: ResearchConfig,
               "OOS": d.loc[i_oos, "ton"].corr(d.loc[i_oos, "btc"].shift(k))} for k in range(0, max_lag + 1)}
     try:
         g = grangercausalitytests(d.loc[i_is, ["ton", "btc"]].values, maxlag=max_lag)
-        gp = {k: float(v[0]["ssr_ftest"][1]) for k, v in g.items()}
+        gp = {int(k): float(v[0]["ssr_ftest"][1]) for k, v in g.items()}
     except Exception as e:  # noqa: BLE001
         gp = {"error": str(e)}
     sd = d["btc"].rolling(96 * 7).std()

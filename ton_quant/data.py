@@ -103,6 +103,13 @@ def probe_vision() -> None:
         raise DataUnavailable(f"нет сетевого доступа к data.binance.vision ({type(e).__name__}: {e})") from e
 
 
+def _is_recent(stamp: str, days: int = 45) -> bool:
+    t = pd.Timestamp(stamp + ("-01" if len(stamp) == 7 else ""), tz="UTC")
+    if len(stamp) == 7:
+        t = t + pd.offsets.MonthEnd(0)
+    return t >= pd.Timestamp.now(tz="UTC").normalize() - pd.Timedelta(days=days)
+
+
 def _vision_file(kind: str, sym: str, tf: str | None, period: str, stamp: str) -> pd.DataFrame | None:
     """Один файл архива (monthly/daily) с кэшем parquet. Возвращает None, если файла нет."""
     tf_part = f"{tf}/" if tf else ""
@@ -112,14 +119,18 @@ def _vision_file(kind: str, sym: str, tf: str | None, period: str, stamp: str) -
         fname = f"{sym}-fundingRate-{stamp}"
     cache = _cache_path("vision", kind, sym, tf or "na", f"{stamp}.parquet")
     miss = cache + ".missing"
+    # Свежие файлы Binance публикует с задержкой (месячный — через несколько дней после
+    # конца месяца, дневной — на следующий день), поэтому их отсутствие не кэшируем.
+    recent = _is_recent(stamp)
     if os.path.exists(cache):
         return pd.read_parquet(cache)
-    if os.path.exists(miss):
+    if os.path.exists(miss) and not recent:
         return None
     url = f"{VISION}/{period}/{kind}/{sym}/{tf_part}{fname}.zip"
     blob = _http_get(url)
     if blob is None:
-        open(miss, "w").close()
+        if not recent:
+            open(miss, "w").close()
         return None
     cols = KLINE_COLS if kind in ("klines", "premiumIndexKlines", "markPriceKlines", "indexPriceKlines") else None
     df = _read_zip_csv(blob, cols)
@@ -145,6 +156,16 @@ def _vision_range(kind: str, sym: str, tf: str | None, start: pd.Timestamp, end:
                          for d in pd.date_range(max(m, start.normalize()), end - pd.Timedelta(days=1))]
     with ThreadPoolExecutor(workers) as ex:
         parts = list(ex.map(lambda j: _vision_file(kind, sym, tf, j[0], j[1]), jobs))
+        # Месячный архив за недавний месяц ещё не опубликован -> добираем дневными файлами.
+        fallback = []
+        for (period, stamp), p in zip(jobs, parts):
+            if period == "monthly" and p is None and _is_recent(stamp):
+                m = pd.Timestamp(stamp + "-01", tz="UTC")
+                days = pd.date_range(max(m, start.normalize()),
+                                     min(m + pd.offsets.MonthEnd(0), end - pd.Timedelta(days=1)))
+                fallback += [("daily", d.strftime("%Y-%m-%d")) for d in days]
+        if fallback:
+            parts += list(ex.map(lambda j: _vision_file(kind, sym, tf, j[0], j[1]), fallback))
     parts = [p for p in parts if p is not None and len(p)]
     if not parts:
         return pd.DataFrame()
