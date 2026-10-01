@@ -1,0 +1,21 @@
+{
+	"geode": "5.10.1",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "ubicasmerti228.ill-replay-bot",
+	"name": "ILL Replay Bot",
+	"version": "v1.1.3",
+	"developer": "UbicaSmerti228",
+	"description": "Tick-accurate replay bot and frame window analyzer for ILL showcases",
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3"
+	},
+	"resources": {
+		"files": [
+			"resources/sounds/*.wav"
+		]
+	}
+}
