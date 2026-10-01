@@ -1,3 +1,4 @@
+#include "../Trace.hpp"
 #include "RouteFinder.hpp"
 
 #include <algorithm>
@@ -55,7 +56,7 @@ Result<> RouteFinder::start(PlayLayer* layer) {
     if (!layer) return Err("Open the level first");
     if (layer->m_isPlatformer) return Err("Platformer levels are not supported");
     auto& bot = Bot::get();
-    geode::log::info("ILL: route search starting");
+    ILL_TRACE("route search: start");
     this->preparePractice(layer);
     bot.mode = BotMode::Play;
     bot.analyzing = true;
@@ -73,7 +74,7 @@ void RouteFinder::drive(PlayLayer* layer, std::function<void(float)> const& step
     auto& bot = Bot::get();
 
     if (m_phase == Phase::Starting) {
-        geode::log::info("ILL: route search: first update");
+        ILL_TRACE("route search: first update");
         this->enterSimulation(layer);
         m_twoPlayerLevel = layer->m_levelSettings && layer->m_levelSettings->m_twoPlayerMode;
         m_path.clear();
@@ -176,7 +177,7 @@ void RouteFinder::runForward(PlayLayer*, bool fromStart) {
 }
 
 void RouteFinder::startSearch(PlayLayer* layer, uint32_t death) {
-    geode::log::info("ILL: route search: died at tick {}, searching a fix", death);
+    ILL_TRACE("route search: died at tick {}, searching a fix", death);
     m_obstacle = death;
     m_successTick = death + SUCCESS_MARGIN;
     m_depth = 1;
@@ -324,7 +325,9 @@ void RouteFinder::widen(PlayLayer* layer) {
 }
 
 void RouteFinder::storeCheckpoint(PlayLayer* layer, uint32_t tick, bool speculative) {
+    ILL_TRACE_N(6, "creating checkpoint at tick {}", tick);
     auto checkpoint = layer->createCheckpoint();
+    ILL_TRACE_N(6, "checkpoint created {}", static_cast<void*>(checkpoint));
     if (!checkpoint) return;
     (speculative ? m_speculative : m_checkpoints)[tick] = checkpoint;
 }

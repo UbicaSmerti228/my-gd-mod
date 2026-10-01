@@ -1,4 +1,5 @@
 #include "Bot.hpp"
+#include "Trace.hpp"
 #include "analysis/Analyzer.hpp"
 #include "sim/SimController.hpp"
 #include "sim/PlayerState.hpp"
@@ -75,7 +76,10 @@ class $modify(BotGameLayer, GJBaseGameLayer) {
         auto layer = static_cast<PlayLayer*>(static_cast<GJBaseGameLayer*>(this));
         auto step = [this](float stepDt) { GJBaseGameLayer::update(stepDt); };
 
-        if (auto sim = SimController::active()) return sim->drive(layer, step);
+        if (auto sim = SimController::active()) {
+            ILL_TRACE_N(6, "update hook: driving the simulation");
+            return sim->drive(layer, step);
+        }
 
         auto& bot = Bot::get();
         if (bot.frozen && bot.mode != BotMode::Off) {
@@ -148,11 +152,14 @@ class $modify(BotPlayLayer, PlayLayer) {
 
     void resetLevel() {
         auto& bot = Bot::get();
+        ILL_TRACE_N(12, "resetLevel hook: begin (mode {}, analyzing {})", static_cast<int>(bot.mode), bot.analyzing);
         // loadFromCheckpoint (called from inside resetLevel in practice) sets the real value.
         bot.tick = 0;
         bot.restoredPlayers = false;
         PlayLayer::resetLevel();
+        ILL_TRACE_N(12, "resetLevel hook: game reset done");
         bot.onReset(this);
+        ILL_TRACE_N(12, "resetLevel hook: bot reset done");
         // Replays count ticks from the start of the level; from a start position they
         // only line up with that same start position.
         if (bot.mode != BotMode::Off && !bot.analyzing && m_startPosObject && !m_isPracticeMode && !m_fields->warnedStartPos) {
@@ -162,12 +169,15 @@ class $modify(BotPlayLayer, PlayLayer) {
         }
         if (auto hud = m_fields->hud) hud->resetTo(bot.tick);
         if (auto controls = FrameControls::current()) controls->onLevelReset();
+        ILL_TRACE_N(12, "resetLevel hook: hud done");
         applySafeMode(this);
         if (isHumanAttempt(this)) Forecast::onAttemptStart(this);
     }
 
     CheckpointObject* createCheckpoint() {
+        ILL_TRACE_N(6, "createCheckpoint hook: begin");
         auto checkpoint = PlayLayer::createCheckpoint();
+        ILL_TRACE_N(6, "createCheckpoint hook: game checkpoint {}", static_cast<void*>(checkpoint));
         if (!checkpoint) return checkpoint;
         auto& bot = Bot::get();
         checkpoint->setUserObject("tick"_spr, CCInteger::create(static_cast<int>(bot.tick)));
@@ -176,12 +186,15 @@ class $modify(BotPlayLayer, PlayLayer) {
             if (m_player1) players->p1.save(m_player1);
             if (m_player2) players->p2.save(m_player2);
             checkpoint->setUserObject("players"_spr, players);
+            ILL_TRACE_N(6, "createCheckpoint hook: snapshot attached");
         }
         return checkpoint;
     }
 
     void loadFromCheckpoint(CheckpointObject* checkpoint) {
+        ILL_TRACE_N(6, "loadFromCheckpoint hook: begin {}", static_cast<void*>(checkpoint));
         PlayLayer::loadFromCheckpoint(checkpoint);
+        ILL_TRACE_N(6, "loadFromCheckpoint hook: game restore done");
         if (!checkpoint) return;
         auto& bot = Bot::get();
         if (auto saved = typeinfo_cast<CCInteger*>(checkpoint->getUserObject("tick"_spr))) {

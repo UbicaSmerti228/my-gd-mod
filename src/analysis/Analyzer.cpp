@@ -1,3 +1,4 @@
+#include "../Trace.hpp"
 #include "Analyzer.hpp"
 #include "LStar.hpp"
 
@@ -104,6 +105,7 @@ Result<> Analyzer::start(PlayLayer* layer, bool optimize) {
     settleTicks = std::clamp(static_cast<int>(Mod::get()->getSavedValue<int64_t>("settle-ticks", 10)), 0, 240);
     measureCbf = Mod::get()->getSavedValue<bool>("cbf-analysis", true);
 
+    ILL_TRACE("analysis: start");
     this->preparePractice(layer);
     bot.mode = BotMode::Play;
     bot.analyzing = true;
@@ -125,7 +127,7 @@ void Analyzer::drive(PlayLayer* layer, std::function<void(float)> const& step) {
     auto& bot = Bot::get();
 
     if (m_phase == Phase::Starting) {
-        geode::log::info("ILL: analysis: first update");
+        ILL_TRACE("analysis: first update");
         this->enterSimulation(layer);
         m_stalledFrames = 0;
         this->beginReference(layer);

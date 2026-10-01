@@ -1,3 +1,4 @@
+#include "../Trace.hpp"
 #include "BotPopup.hpp"
 #include "../analysis/Analyzer.hpp"
 #include "../analysis/LStar.hpp"
@@ -286,13 +287,15 @@ void BotPopup::buildAnalysisPage() {
                 isRunning ? "GJ_button_06.png" : action.texture, 28.f
             ),
             [this, kind](CCMenuItemSpriteExtra*) {
-                log::info("ILL: action button {} pressed", kind);
+                ILL_TRACE("button {} pressed", kind);
                 if (auto sim = SimController::active()) {
                     sim->cancel(PlayLayer::get());
                     return this->onClose(nullptr);
                 }
+                ILL_TRACE("button {}: starting", kind);
                 auto res = kind == 2 ? RouteFinder::get().start(PlayLayer::get())
                     : Analyzer::get().start(PlayLayer::get(), kind == 1);
+                ILL_TRACE("button {}: started ({})", kind, res ? "ok" : "error");
                 if (!res) return this->notify(res.unwrapErr(), false);
                 // It runs in the level: unpause straight away. Progress is shown bottom right.
                 this->resumeGame(false);
@@ -341,7 +344,7 @@ void BotPopup::buildModeTabs() {
         auto mode = tab.mode;
         auto button = CCMenuItemExt::createSpriteExtra(sprite, [this, mode](CCMenuItemSpriteExtra*) {
             auto& bot = Bot::get();
-            log::info("ILL: mode tab {} pressed", static_cast<int>(mode));
+            ILL_TRACE("mode tab {} pressed", static_cast<int>(mode));
             if (bot.mode == mode || SimController::active()) return;
 
             auto apply = [this, mode] {
@@ -522,12 +525,13 @@ void BotPopup::resumeGame(bool restart) {
     PauseLayer* pause = nullptr;
     if (auto scene = CCDirector::get()->getRunningScene()) pause = scene->getChildByType<PauseLayer>(0);
     Ref<PauseLayer> keep = pause;
-    log::info("ILL: resuming the game (restart {}, pause layer {})", restart, static_cast<void*>(pause));
+    ILL_TRACE("resume: pause layer {}", static_cast<void*>(pause));
     this->onClose(nullptr);
+    ILL_TRACE("resume: popup closed");
     if (!pause) return;
     if (restart) pause->onRestartFull(nullptr);
     else pause->onResume(nullptr);
-    log::info("ILL: game resumed");
+    ILL_TRACE("resume: done");
 }
 
 void BotPopup::showHelp() {
