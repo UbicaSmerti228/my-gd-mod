@@ -55,6 +55,7 @@ Result<> RouteFinder::start(PlayLayer* layer) {
     if (!layer) return Err("Open the level first");
     if (layer->m_isPlatformer) return Err("Platformer levels are not supported");
     auto& bot = Bot::get();
+    this->preparePractice(layer);
     bot.mode = BotMode::Play;
     bot.analyzing = true;
     bot.simInputs.clear();

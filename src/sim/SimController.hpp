@@ -43,6 +43,8 @@ protected:
     // Buttons held across a checkpoint are pressed again, like holding through a respawn.
     static void repressHeld(GJBaseGameLayer* layer);
 
+    // Called when the simulation is started from a menu, before the game resumes.
+    void preparePractice(PlayLayer* layer);
     void enterSimulation(PlayLayer* layer);
     void leaveSimulation(PlayLayer* layer);
 

@@ -46,11 +46,18 @@ uint32_t SimController::stepOnce(PlayLayer* layer, std::function<void(float)> co
     return bot.tick >= before ? bot.tick - before : 0;
 }
 
-void SimController::enterSimulation(PlayLayer* layer) {
-    if (m_entered) return;
-    m_entered = true;
+void SimController::preparePractice(PlayLayer* layer) {
+    // The simulations restore the level from checkpoints, which the game only does in
+    // practice mode. Switching it on restarts the level, which is safe from a menu
+    // (this is what the pause menu's own practice switch does) but crashed when done
+    // from inside the game update, so it is done here, when the simulation is started.
     m_wasPractice = layer->m_isPracticeMode;
     if (!m_wasPractice) layer->togglePracticeMode(true);
+}
+
+void SimController::enterSimulation(PlayLayer*) {
+    if (m_entered) return;
+    m_entered = true;
     if (auto engine = FMODAudioEngine::get(); engine && engine->m_globalChannel) {
         engine->m_globalChannel->getVolume(&m_oldVolume);
         engine->m_globalChannel->setVolume(0.f);
@@ -66,8 +73,14 @@ void SimController::leaveSimulation(PlayLayer* layer) {
     m_entered = false;
     if (layer) {
         layer->m_checkpointArray->removeAllObjects();
-        if (!m_wasPractice) layer->togglePracticeMode(false);
+        // Practice mode is not switched off again here: that restarts the level through
+        // the game's practice switch, which must not run inside the game update. The
+        // level just restarts from the start.
         layer->resetLevel();
+        if (!m_wasPractice) {
+            Notification::create("Practice mode is on now (the simulation needs it); switch it off in the pause menu",
+                NotificationIcon::Info, 4.f)->show();
+        }
     }
     if (auto engine = FMODAudioEngine::get(); engine && engine->m_globalChannel) {
         engine->m_globalChannel->setVolume(m_oldVolume);

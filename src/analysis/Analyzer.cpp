@@ -104,6 +104,7 @@ Result<> Analyzer::start(PlayLayer* layer, bool optimize) {
     settleTicks = std::clamp(static_cast<int>(Mod::get()->getSavedValue<int64_t>("settle-ticks", 10)), 0, 240);
     measureCbf = Mod::get()->getSavedValue<bool>("cbf-analysis", true);
 
+    this->preparePractice(layer);
     bot.mode = BotMode::Play;
     bot.analyzing = true;
     bot.simInputs = bot.replay.inputs;
