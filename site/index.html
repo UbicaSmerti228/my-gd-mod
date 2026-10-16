@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Керамика «Шамот»</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Каменная посуда ручной работы из Иркутска: кружки, миски и тарелки небольшими партиями после каждого обжига. Наличие, предзаказ, портфолио, доставка OZON и Авито, самовывоз.">
+<meta name="theme-color" content="#EEE5D6">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23EEE5D6'/%3E%3Cpath d='M6 11h20c0 8-4 13-10 13S6 19 6 11z' fill='%23CBB794' stroke='%232B221C' stroke-width='1.6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&family=IBM+Plex+Mono:wght@400;500&family=Piazzolla:ital,opsz,wght@0,8..30,400..700;1,8..30,400..600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#stock">Перейти к наличию</a>
+
+<div class="strip">
+  <div class="wrap strip-in">
+    <span class="ember" aria-hidden="true"></span>
+    <p id="strip-text">Обжиг №47 открыт 12 октября.</p>
+  </div>
+</div>
+
+<header class="site-head">
+  <div class="wrap head-in">
+    <a class="brand" href="#top">
+      <span class="brand-name" data-studio="name">Шамот</span>
+      <span class="brand-sub">керамическая мастерская · <span data-studio="city">Иркутск</span></span>
+    </a>
+    <nav class="nav" aria-label="Разделы">
+      <a href="#stock">Наличие</a>
+      <a href="#portfolio">Портфолио</a>
+      <a href="#glazes">Глазури</a>
+      <a href="#log">Журнал обжигов</a>
+      <a href="#giveaway">Розыгрыш</a>
+      <a href="#delivery">Доставка</a>
+      <a href="#cafe">Для кафе</a>
+    </nav>
+    <button class="order-btn" id="order-open" type="button" aria-haspopup="dialog">
+      Заказ <span class="order-count is-zero" id="order-count">0</span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero-text">
+      <p class="meta" id="hero-meta">Обжиг №47 · печь открыта 12 октября</p>
+      <h1 id="hero-title">Каждые три недели я&nbsp;открываю печь</h1>
+      <p class="hero-lead" id="hero-lead">В печь помещается около сорока кружек, мисок и тарелок из каменной массы.</p>
+      <div class="hero-actions">
+        <a class="btn" href="#stock">Посмотреть, что осталось</a>
+        <a class="text-link" href="#next" id="hero-pre">Предзаказ на обжиг №48</a>
+      </div>
+      <dl class="facts">
+        <div>
+          <dt>1230&nbsp;°C</dt>
+          <dd>Масса спекается и не впитывает воду: можно в посудомойку, микроволновку и духовку.</dd>
+        </div>
+        <div>
+          <dt>±3&nbsp;мм</dt>
+          <dd>Всё точится на круге вручную, поэтому предметы одной формы немного отличаются.</dd>
+        </div>
+        <div>
+          <dt id="fact-ship">350&nbsp;₽</dt>
+          <dd id="fact-ship-text">Доставка через OZON до пункта выдачи, 5–10 дней. Или самовывоз в Иркутске.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <figure class="kiln" id="kiln">
+      <div class="kiln-art" id="kiln-art"></div>
+      <div class="kiln-tip" id="kiln-tip" hidden></div>
+      <figcaption class="kiln-cap">
+        <span class="legend"><i class="sw sw-fill" aria-hidden="true"></i>есть в наличии</span>
+        <span class="legend"><i class="sw sw-sold" aria-hidden="true"></i>уже продано</span>
+        <span class="kiln-note">Разрез печи после обжига, все предметы в одном масштабе. На третьей полке — конусы-свидетели: шестой согнулся, седьмой устоял, значит, печь дошла до 1230&nbsp;°C. Нажмите на предмет, чтобы открыть описание.</span>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="section wrap" id="stock" aria-labelledby="stock-title">
+    <div class="section-head">
+      <h2 id="stock-title">Что осталось после обжига №47</h2>
+      <p class="lead">Цена — за один предмет. На чертеже слева вид снаружи в цвете глазури, справа разрез: видно толщину стенки и дна. Нажмите на чертёж, чтобы увидеть вес, уход и все глазури.</p>
+    </div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Тип посуды" id="cat-filter"></div>
+      <div class="toggles">
+        <label class="check" for="only-stock"><input type="checkbox" id="only-stock"> Только в наличии</label>
+        <label class="check" for="same-scale"><input type="checkbox" id="same-scale"> Чертежи в одном масштабе</label>
+        <button class="chip" type="button" id="glaze-reset" hidden></button>
+      </div>
+    </div>
+    <div class="catalog" id="catalog"></div>
+  </section>
+
+  <section class="section wrap portfolio" id="portfolio" aria-labelledby="portfolio-title">
+    <div class="section-head section-head--row">
+      <div class="section-head-text">
+        <h2 id="portfolio-title">Портфолио</h2>
+        <p class="lead">Серии, открытия печи, заказы для кафе и мастерская. Фото собраны в подборки: внутри каждой — все снимки с подписями.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Тип подборки" id="album-filter"></div>
+    </div>
+    <div class="albums" id="albums"></div>
+    <div class="albums-more" id="albums-more" hidden>
+      <button class="btn btn-quiet" type="button" id="albums-all">Показать все подборки</button>
+    </div>
+  </section>
+
+  <section class="section wrap" id="glazes" aria-labelledby="glazes-title">
+    <div class="section-head">
+      <h2 id="glazes-title">Пять глазурей и&nbsp;как они себя ведут</h2>
+      <p class="lead">Это тестовые плитки: я делаю их перед каждой новой партией глазури. На рёбрах видно, где глазурь истончается, в бороздках — где собирается и темнеет. На посуде то же самое происходит на ручках, кромках и у ножки.</p>
+    </div>
+    <ul class="glazes" id="glaze-list"></ul>
+  </section>
+
+  <section class="band" id="log" aria-labelledby="log-title">
+    <div class="wrap section">
+      <div class="section-head">
+        <h2 id="log-title">Журнал обжигов</h2>
+        <p class="lead">Записываю каждый обжиг: сколько предметов было в печи, сколько ушло в брак и почему. Предметы с трещинами не продаю даже со скидкой — трещина в каменной массе со временем растёт.</p>
+      </div>
+      <div class="log-grid">
+        <div class="log-main">
+          <div class="table-scroll">
+            <table class="log-table">
+              <thead>
+                <tr><th scope="col">Обжиг</th><th scope="col">Открыт</th><th scope="col" class="n">Загружено</th><th scope="col" class="n">Брак</th><th scope="col" class="n">В наличии</th><th scope="col">Что было</th></tr>
+              </thead>
+              <tbody id="log-rows"></tbody>
+            </table>
+          </div>
+          <p class="log-sum" id="log-sum"></p>
+        </div>
+        <aside class="next" id="next" aria-labelledby="next-title"></aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap" id="process" aria-labelledby="process-title">
+    <div class="section-head">
+      <h2 id="process-title">Девятнадцать дней от&nbsp;глины до&nbsp;коробки</h2>
+      <p class="lead">Поэтому кружка стоит <span id="mug-price">2&nbsp;400&nbsp;₽</span> и не появляется за выходные. От каждого этапа зависит, как вещь будет служить у вас дома.</p>
+    </div>
+    <div class="journey" id="journey" aria-hidden="true"></div>
+    <p class="journey-cap">Цвет полосы — цвет глины на этом этапе: сырая масса тёмная, после сушки и обжигов светлеет.</p>
+    <ol class="stages" id="stages"></ol>
+  </section>
+
+  <section class="band band--light" id="giveaway" aria-labelledby="giveaway-title">
+    <div class="wrap section">
+      <div class="section-head">
+        <h2 id="giveaway-title">Розыгрыш</h2>
+        <p class="lead">Время от времени разыгрываю предметы из свежего обжига. Условия, сроки и итоги — здесь и в Telegram-канале.</p>
+      </div>
+      <div id="giveaway-body"></div>
+    </div>
+  </section>
+
+  <section class="section wrap" id="delivery" aria-labelledby="delivery-title">
+    <div class="section-head">
+      <h2 id="delivery-title">Доставка, самовывоз и&nbsp;уход</h2>
+    </div>
+    <div class="care-grid">
+      <div class="delivery-col">
+        <ul class="ship" id="ship"></ul>
+        <dl class="terms">
+          <div>
+            <dt>Упаковка</dt>
+            <dd>Каждый предмет — в крафтовой бумаге и пузырчатой плёнке. Коробка в коробке, между стенками 5&nbsp;см наполнителя.</dd>
+          </div>
+          <div>
+            <dt>Если разбилось</dt>
+            <dd>Сфотографируйте коробку и предмет при получении и пришлите мне. Сделаю такой же в следующем обжиге или верну деньги — как скажете.</dd>
+          </div>
+          <div>
+            <dt>Оплата</dt>
+            <dd>После того как я подтвержу заказ: по СБП или картой по ссылке. Предзаказ — 50% сразу, остальное после обжига.</dd>
+          </div>
+        </dl>
+      </div>
+
+      <article class="insert" aria-labelledby="insert-title">
+        <p class="insert-meta">Вкладыш · лежит в каждой коробке</p>
+        <h3 id="insert-title">Как обращаться с&nbsp;посудой</h3>
+        <dl class="care-list">
+          <div>
+            <dt>Можно</dt>
+            <dd><ul>
+              <li>Посудомоечная машина, любой режим.</li>
+              <li>Микроволновка: в глазурях нет металла.</li>
+              <li>Духовка до 200&nbsp;°C.</li>
+            </ul></dd>
+          </div>
+          <div>
+            <dt>Осторожно</dt>
+            <dd><ul>
+              <li>Из холодильника в горячую духовку — сначала дайте посуде 15 минут постоять на столе.</li>
+              <li>На матовых глазурях («Овсянка», «Ржаная корка») от ножа остаются серые следы. Они смываются пастой из соды.</li>
+            </ul></dd>
+          </div>
+          <div>
+            <dt>Нельзя</dt>
+            <dd><ul>
+              <li>Открытый огонь, конфорка, гриль.</li>
+              <li>Кипяток в посуду прямо из морозилки.</li>
+            </ul></dd>
+          </div>
+        </dl>
+        <p class="insert-foot">Откололся край — не выбрасывайте. Пришлите фото, подскажу, как зашлифовать.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section wrap cafe" id="cafe" aria-labelledby="cafe-title">
+    <div class="cafe-text">
+      <h2 id="cafe-title">Посуда для кафе</h2>
+      <p>Делаю партии от 20 предметов одной формы: тарелки, пиалы, чашки под ваш объём порции. Сначала 2–3 образца в нужных глазурях — это около двух недель. После того как вы подержите их в руках и проверите в посудомойке, начинаю производство.</p>
+      <p>Срок зависит от того, сколько предметов помещается в печь: кружек — сорок за раз, обеденных тарелок — четырнадцать. Под такой заказ загружаю печь раз в десять дней.</p>
+      <p>Напишите в Telegram <a class="text-link" data-studio="telegram-link" href="https://t.me/shamot_ceramics">@shamot_ceramics</a>: какая форма, сколько штук и к какой дате.</p>
+    </div>
+    <form class="calc" id="cafe-calc" novalidate>
+      <h3>Сколько ждать</h3>
+      <div class="field">
+        <label for="cafe-form">Форма</label>
+        <select id="cafe-form"></select>
+      </div>
+      <div class="field">
+        <label for="cafe-qty">Количество, шт.</label>
+        <input id="cafe-qty" type="number" min="1" step="1" value="60" inputmode="numeric">
+      </div>
+      <output class="calc-out" id="cafe-out" for="cafe-form cafe-qty" aria-live="polite"></output>
+    </form>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <p class="foot-name" data-studio="name">Шамот</p>
+      <p>Керамическая мастерская в&nbsp;<span data-studio="city-in">Иркутске</span>. Самовывоз: <span data-studio="pickup">Иркутск, ул. Пискунова, 156/1</span> — по договорённости.</p>
+    </div>
+    <dl class="foot-contacts">
+      <div><dt>Telegram</dt><dd><a data-studio="telegram-link" href="https://t.me/shamot_ceramics">@shamot_ceramics</a></dd></div>
+      <div><dt>Почта</dt><dd data-studio="email">hello@shamot.example</dd></div>
+      <div><dt>Телефон</dt><dd data-studio="phone">+7 900 000-00-00</dd></div>
+    </dl>
+    <!-- Удалите эту строку, когда замените пример на свои данные в content/*.json -->
+    <p class="foot-note">Цены, остатки, журнал обжигов, фото и розыгрыши на этой странице — пример заполнения.</p>
+  </div>
+</footer>
+
+<dialog class="sheet" id="product" aria-labelledby="product-title">
+  <div id="product-body"></div>
+</dialog>
+
+<dialog class="drawer" id="order" aria-labelledby="order-title">
+  <div class="drawer-head">
+    <h2 id="order-title">Заказ</h2>
+    <button class="close" type="button" data-close>Закрыть</button>
+  </div>
+  <div class="drawer-body" id="order-body"></div>
+</dialog>
+
+<dialog class="album" id="album" aria-labelledby="album-title">
+  <div id="album-body"></div>
+</dialog>
+
+<dialog class="lightbox" id="lightbox" aria-label="Просмотр фото">
+  <div class="lb" id="lightbox-body"></div>
+</dialog>
+
+<p class="sr-only" aria-live="polite" id="live"></p>
+
+<noscript><p class="noscript">Каталог, портфолио и заказ работают с включённым JavaScript. Написать напрямую: Telegram @shamot_ceramics.</p></noscript>
+
+<script src="data.js"></script>
+<script src="draw.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+{
+  "studio": {
+    "name": "Шамот",
+    "city": "Иркутск",
+    "cityIn": "Иркутске",
+    "telegram": "shamot_ceramics",
+    "email": "hello@shamot.example",
+    "phone": "+7 900 000-00-00"
+  },
+  "delivery": {
+    "pickupAddress": "Иркутск, ул. Пискунова, 156/1",
+    "pickupNote": "По договорённости: напишите заранее, и договоримся о дне и времени.",
+    "options": [
+      {
+        "id": "ozon",
+        "name": "OZON",
+        "price": 350,
+        "priceText": "350 ₽",
+        "time": "5–10 дней",
+        "text": "Самый выгодный вариант. Мне нужны ваш номер телефона и адрес пункта выдачи OZON. Посылку получаете так же, как обычные заказы, — по штрихкоду в приложении.",
+        "askPoint": true
+      },
+      {
+        "id": "avito",
+        "name": "Авито Доставка",
+        "price": 0,
+        "priceText": "от 250 до 600 ₽",
+        "time": "7–10 дней",
+        "text": "Создаю объявление с вашим товаром, вы оформляете его с доставкой. Точную цену увидите сами при оформлении.",
+        "askPoint": false
+      }
+    ]
+  },
+  "firing": {
+    "no": 47,
+    "opened": "2026-10-12",
+    "loaded": 43,
+    "rejects": 2
+  },
+  "next": {
+    "no": 48,
+    "deadline": "2026-10-26",
+    "loading": "2026-10-29",
+    "firing": "2026-10-30",
+    "opening": "2026-11-02"
+  },
+  "forms": [
+    {
+      "id": "mug",
+      "name": "Кружка большая",
+      "cat": "cups",
+      "handle": true,
+      "use": "Для чая и кофе с молоком. Ручка на три пальца, стенка держит тепло дольше тонкого фарфора.",
+      "volume": 320, "d": 8.5, "h": 9.5, "weight": 340, "price": 2400,
+      "made": 10, "slotsTotal": 10, "slotsTaken": 4,
+      "variants": [
+        { "glaze": "milk", "stock": 3 },
+        { "glaze": "sugar", "stock": 2 },
+        { "glaze": "oat", "stock": 0 },
+        { "glaze": "rye", "stock": 1 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "espresso",
+      "name": "Стаканчик для эспрессо",
+      "cat": "cups",
+      "handle": false,
+      "use": "Для эспрессо и кортадо. Без ручки, чуть сужен к краю, чтобы дольше держать пенку и тепло.",
+      "volume": 100, "d": 6.6, "h": 6, "weight": 150, "price": 1500,
+      "made": 6, "slotsTotal": 6, "slotsTaken": 1,
+      "variants": [
+        { "glaze": "sugar", "stock": 2 },
+        { "glaze": "ash", "stock": 1 },
+        { "glaze": "rye", "stock": 0 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "tumbler",
+      "name": "Стакан",
+      "cat": "cups",
+      "handle": false,
+      "use": "Для воды, морса, капучино. Стенка слегка расширяется кверху — удобно пить и мыть.",
+      "volume": 280, "d": 7.6, "h": 10.5, "weight": 260, "price": 1900,
+      "made": 6, "slotsTotal": 6, "slotsTaken": 5,
+      "variants": [
+        { "glaze": "oat", "stock": 0 },
+        { "glaze": "ash", "stock": 0 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "teabowl",
+      "name": "Пиала",
+      "cat": "bowls",
+      "handle": false,
+      "use": "Для чая, ягод, соусов. Высокая ножка: пиалу удобно держать, даже когда она горячая.",
+      "volume": 200, "d": 10.5, "h": 6.5, "weight": 230, "price": 1700,
+      "made": 5, "slotsTotal": 6, "slotsTaken": 3,
+      "variants": [
+        { "glaze": "sugar", "stock": 1 },
+        { "glaze": "ash", "stock": 0 },
+        { "glaze": "milk", "stock": 0 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "bowl",
+      "name": "Миска глубокая",
+      "cat": "bowls",
+      "handle": false,
+      "use": "Для супа, рамена, салата. Порция супа — около 450 мл, остаётся место, чтобы не расплескать.",
+      "volume": 600, "d": 15, "h": 7.5, "weight": 520, "price": 2900,
+      "made": 4, "slotsTotal": 4, "slotsTaken": 0,
+      "variants": [
+        { "glaze": "oat", "stock": 2 },
+        { "glaze": "milk", "stock": 0 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "plate",
+      "name": "Тарелка обеденная",
+      "cat": "plates",
+      "handle": false,
+      "use": "Для горячего. Невысокий борт не даёт соусу убежать, плоское дно — места хватает для гарнира.",
+      "volume": 0, "d": 26, "h": 2.8, "weight": 720, "price": 3200,
+      "made": 4, "slotsTotal": 6, "slotsTaken": 2,
+      "variants": [
+        { "glaze": "milk", "stock": 0 },
+        { "glaze": "oat", "stock": 0 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "dessert",
+      "name": "Тарелка десертная",
+      "cat": "plates",
+      "handle": false,
+      "use": "Для завтрака, десерта, закусок. Помещается на полку для обычных тарелок.",
+      "volume": 0, "d": 20, "h": 2.4, "weight": 480, "price": 2300,
+      "made": 3, "slotsTotal": 4, "slotsTaken": 0,
+      "variants": [
+        { "glaze": "milk", "stock": 1 },
+        { "glaze": "ash", "stock": 0 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "platter",
+      "name": "Блюдо сервировочное",
+      "cat": "plates",
+      "handle": false,
+      "use": "Для запечённой рыбы, пирога, сыров на компанию. В духовке выдерживает 200 °C.",
+      "volume": 0, "d": 32, "h": 4.2, "weight": 1400, "price": 5400,
+      "made": 1, "slotsTotal": 2, "slotsTaken": 1,
+      "variants": [
+        { "glaze": "sugar", "stock": 0 }
+      ],
+      "photos": []
+    },
+    {
+      "id": "jug",
+      "name": "Молочник",
+      "cat": "jugs",
+      "handle": true,
+      "use": "Для молока, сливок, соуса. Узкое горло и отогнутый край — струя не течёт по стенке.",
+      "volume": 350, "d": 9.2, "h": 12, "weight": 430, "price": 3100,
+      "made": 2, "slotsTotal": 3, "slotsTaken": 1,
+      "variants": [
+        { "glaze": "rye", "stock": 1 },
+        { "glaze": "milk", "stock": 0 }
+      ],
+      "photos": []
+    }
+  ],
+  "log": [
+    {
+      "no": 47, "opened": "2026-10-12", "loaded": 43, "rejects": 2, "left": 14,
+      "note": "Трещина по дну у одной миски, пузырь глазури на тарелке. «Жжёный сахар» вышел темнее обычного — на кружках длинные подтёки."
+    },
+    {
+      "no": 46, "opened": "2026-09-21", "loaded": 40, "rejects": 3, "left": 0,
+      "note": "Два блюда треснули при остывании: печь открыта при 120 °C — слишком рано. Теперь жду, пока остынет до 60 °C."
+    },
+    {
+      "no": 45, "opened": "2026-08-31", "loaded": 44, "rejects": 1, "left": 0,
+      "note": "Первая партия «Пепла». Одна пиала прилипла к полке — глазурь затекла на ножку."
+    },
+    {
+      "no": 44, "opened": "2026-08-10", "loaded": 38, "rejects": 6, "left": 0,
+      "note": "Перегрев на верхней полке: «Овсянка» потекла на двух блюдах. Термопара заменена."
+    },
+    {
+      "no": 43, "opened": "2026-07-20", "loaded": 42, "rejects": 2, "left": 0,
+      "note": "Обычный обжиг. У двух кружек отошла ручка: в жару сушка прошла слишком быстро."
+    }
+  ]
+}
