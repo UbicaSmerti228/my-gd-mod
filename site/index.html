@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ru" data-bg="linen">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Керамика · Иркутск</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Керамическая посуда ручной работы, Иркутск. Наличие, работы, доставка OZON и Авито, самовывоз.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Керамика · Иркутск">
+<meta property="og:description" content="Керамическая посуда ручной работы, Иркутск. Наличие, работы, доставка OZON и Авито, самовывоз.">
+<meta name="theme-color" content="#E7E0D4">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23E7E0D4'/%3E%3Cpath d='M7 12h18c0 7-4 11-9 11s-9-4-9-11z' fill='%232B2722'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ysabeau+Office:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#shop">К посуде</a>
+
+<header class="site-head">
+  <div class="wrap head-in">
+    <a class="brand" href="#top" id="brand">Керамика</a>
+    <nav class="nav" aria-label="Разделы">
+      <a href="#shop">Посуда</a>
+      <a href="#works">Работы</a>
+      <a href="#giveaway" id="nav-giveaway" hidden>Розыгрыш</a>
+      <a href="#delivery">Доставка</a>
+    </nav>
+    <a class="head-msg" href="#contact">Написать</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-media" id="hero-media"></div>
+    <div class="wrap hero-label">
+      <h1 id="hero-title">Керамическая посуда ручной работы. Иркутск</h1>
+      <div class="hero-aside">
+        <p id="hero-delivery"></p>
+        <p><a class="link" href="#shop">Что есть в наличии</a></p>
+        <p id="hero-giveaway" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap" id="shop" aria-labelledby="shop-title">
+    <div class="shop-head">
+      <h2 id="shop-title">Посуда</h2>
+      <p class="small" id="shop-note"></p>
+    </div>
+    <div class="cats" id="cats" role="group" aria-label="Категории" hidden></div>
+    <div class="grid" id="grid"></div>
+    <p class="more" id="shop-more" hidden><button class="link" type="button" id="shop-all"></button></p>
+  </section>
+
+  <section class="section wrap hang" id="works" aria-labelledby="works-title">
+    <div class="hang-head"><h2 id="works-title">Работы</h2></div>
+    <div class="hang-body">
+      <div id="albums"></div>
+      <div id="albums-index"></div>
+    </div>
+  </section>
+
+  <section class="section wrap hang" id="giveaway" aria-labelledby="giveaway-title">
+    <div class="hang-head"><h2 id="giveaway-title">Розыгрыш</h2></div>
+    <div class="hang-body" id="giveaway-body"></div>
+  </section>
+
+  <section class="section wrap hang" id="delivery" aria-labelledby="delivery-title">
+    <div class="hang-head"><h2 id="delivery-title">Как получить</h2></div>
+    <div class="hang-body">
+      <div class="ways" id="ways"></div>
+      <p class="ways-note">Выберите вещь и нажмите «Написать о покупке» — сообщение соберётся само.</p>
+      <div class="texts" id="texts"></div>
+    </div>
+  </section>
+
+  <section class="section wrap hang" id="contact" aria-labelledby="contact-title">
+    <div class="hang-head"><h2 id="contact-title">Написать</h2></div>
+    <div class="hang-body">
+      <p class="about" id="about" hidden></p>
+      <ul class="contacts" id="contacts"></ul>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <div class="wrap foot-in">
+    <p class="foot-name" id="foot-name">Керамика</p>
+    <p class="small" id="foot-pickup"></p>
+    <p class="small foot-demo" id="foot-demo" hidden>Пока здесь примеры. Они исчезнут, когда вы заполните разделы в админке.</p>
+  </div>
+</footer>
+
+<div class="msgbar" id="msgbar" hidden>
+  <div class="wrap msgbar-in">
+    <p id="msgbar-text"></p>
+    <button class="btn btn--light" type="button" id="msgbar-open">Написать</button>
+  </div>
+</div>
+
+<dialog class="view" id="item-view" aria-labelledby="item-title"></dialog>
+<dialog class="view" id="album-view" aria-labelledby="album-title"></dialog>
+<dialog class="panel" id="composer" aria-labelledby="composer-title"></dialog>
+<dialog class="lightbox" id="lightbox" aria-label="Просмотр фото"></dialog>
+
+<p class="sr-only" aria-live="polite" id="live"></p>
+<noscript><p class="noscript">Сайт работает с включённым JavaScript.</p></noscript>
+
+<script src="app.js"></script>
+</body>
+</html>
