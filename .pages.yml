@@ -1,65 +1,101 @@
 # Админка сайта: https://app.pagescms.org — войти через GitHub и выбрать этот репозиторий.
-# Здесь описано, какие поля можно править. Фото загружаются в site/photos.
+# Фото загружаются в site/photos. При публикации они автоматически уменьшаются, геоданные удаляются.
 
 media:
   input: site/photos
   output: photos
-  extensions: [jpg, jpeg, png, webp, avif]
+  extensions: [jpg, jpeg, png, webp]
 
 content:
+  - name: products
+    label: Посуда
+    type: file
+    path: site/content/products.json
+    fields:
+      - name: items
+        label: Вещи
+        description: Порядок здесь — порядок на сайте. Проданные сами уходят в конец.
+        type: object
+        list: true
+        fields:
+          - name: title
+            label: Название
+            type: string
+            required: true
+          - name: photos
+            label: Фото
+            description: "1-е — вещь одна на бежевом фоне, вертикально. 2-е — в руке, так видно размер (появляется при наведении). Дальше — глазурь, донце."
+            type: image
+            options:
+              multiple: true
+          - name: price
+            label: Цена, ₽
+            type: number
+          - name: status
+            label: Статус
+            type: select
+            options:
+              values:
+                - { value: available, label: В наличии }
+                - { value: order, label: Под заказ }
+                - { value: reserved, label: Забронировано }
+                - { value: sold, label: Продано }
+                - { value: hidden, label: Скрыть с сайта }
+          - name: size
+            label: Размер
+            description: "Измерьте линейкой и весами, например: 320 мл, высота 9,5 см"
+            type: string
+          - name: color
+            label: Цвет или глазурь
+            type: string
+          - name: qty
+            label: Сколько штук
+            description: Если больше одной, на сайте появится «есть 3 шт.»
+            type: number
+          - name: description
+            label: Пара слов
+            type: text
+          - name: category
+            label: Категория
+            description: Например, «кружки». Фильтр по категориям появится, когда вещей станет 12 и больше.
+            type: string
+
   - name: portfolio
-    label: Портфолио
+    label: Работы
     type: file
     path: site/content/portfolio.json
     fields:
       - name: albums
-        label: Подборки (порядок здесь = порядок на сайте)
+        label: Подборки
+        description: Порядок здесь — порядок на сайте. На главной — первые три подборки по пять фото, остальные — списком.
         type: object
         list: true
         fields:
-          - name: id
-            label: Короткое имя латиницей, без пробелов (например, utro или kiln-48)
-            type: string
-            required: true
           - name: title
             label: Название подборки
             type: string
             required: true
-          - name: kind
-            label: Тип
-            type: select
-            options:
-              values:
-                - { value: series, label: Серия }
-                - { value: kiln, label: Открытие печи }
-                - { value: cafe, label: Для кафе }
-                - { value: process, label: Мастерская }
-          - name: date
-            label: Дата
-            type: date
+          - name: when
+            label: Когда
+            description: Например, «весна 2026»
+            type: string
           - name: text
-            label: Пара предложений о подборке
+            label: Пара слов
             type: text
-          - name: cover
-            label: Обложка (если пусто — первое фото)
-            type: image
           - name: photos
-            label: Фото с подписями
-            type: object
-            list: true
-            fields:
-              - name: src
-                label: Фото
-                type: image
-                required: true
-              - name: caption
-                label: Подпись
-                type: string
-          - name: gallery
-            label: Быстрая загрузка — много фото без подписей (покажутся после подписанных)
+            label: Фото
+            description: Можно загрузить сразу много. Первые пять попадут на главную, первое — крупно.
             type: image
             options:
               multiple: true
+          - name: captions
+            label: Подписи
+            description: Выберите фото из загруженных и напишите подпись. Подписанное фото показывается крупно, подпись стоит рядом.
+            type: object
+            list: true
+            fields:
+              - { name: photo, label: Фото, type: image }
+              - { name: text, label: Подпись, type: text }
 
   - name: giveaways
     label: Розыгрыши
@@ -67,127 +103,91 @@ content:
     path: site/content/giveaways.json
     fields:
       - name: items
-        label: Розыгрыши (новый — первым в списке)
+        label: Розыгрыши
+        description: Статус меняется сам по датам. После даты итогов розыгрыш уходит в «Прошлые».
         type: object
         list: true
         fields:
-          - { name: id, label: Короткое имя латиницей, type: string, required: true }
-          - { name: title, label: Название, type: string, required: true }
-          - { name: prize, label: Что разыгрываю, type: text }
-          - { name: image, label: Фото приза, type: image }
+          - { name: title, label: Что разыгрываете, type: string, required: true }
+          - { name: photo, label: Фото приза, type: image }
           - { name: start, label: Начало, type: date }
-          - { name: end, label: Итоги, type: date }
-          - { name: conditions, label: Условия (по одному на строку), type: string, list: true }
-          - { name: how, label: Как выбираю победителя, type: text }
-          - { name: rules, label: Мелкий шрифт, type: text }
+          - { name: end, label: Последний день, type: date }
+          - { name: results, label: Дата итогов, type: date }
+          - name: conditions
+            label: Условия
+            description: Одно условие на строку.
+            type: text
+          - { name: how, label: Как выбираете победителя, type: text }
           - { name: link, label: Ссылка на пост, type: string }
-          - { name: winner, label: Победитель (заполнить после итогов), type: string }
+          - { name: winner, label: Победитель, description: Заполните после итогов, type: string }
+          - { name: draft, label: Черновик, description: Пока включено, розыгрыш виден только по адресу сайта с #preview в конце, type: boolean }
 
-  - name: shop
-    label: Наличие, обжиги и доставка
+  - name: site
+    label: Сайт
     type: file
-    path: site/content/shop.json
+    path: site/content/site.json
     fields:
-      - name: studio
-        label: Мастерская и контакты
+      - name: demo
+        label: Показывать примеры
+        description: Пока включено, в пустых разделах видны рамки-примеры. Выключите, когда заполните сайт.
+        type: boolean
+      - { name: name, label: Название мастерской или ваше имя, type: string }
+      - { name: tagline, label: Строка под главным фото, type: string }
+      - name: background
+        label: Фон сайта
+        description: Выберите тон, ближайший к фону, на котором вы снимаете.
+        type: select
+        options:
+          values:
+            - { value: linen, label: Лён }
+            - { value: sand, label: Песок }
+            - { value: grey, label: Серый беж }
+      - name: hero
+        label: Главное фото
         type: object
         fields:
-          - { name: name, label: Название, type: string }
-          - { name: city, label: Город, type: string }
-          - { name: cityIn, label: Город в предложном падеже (в Иркутске), type: string }
-          - { name: telegram, label: Telegram без @, type: string }
-          - { name: email, label: Почта, type: string }
-          - { name: phone, label: Телефон, type: string }
-      - name: delivery
-        label: Доставка и самовывоз
-        type: object
-        fields:
-          - { name: pickupAddress, label: Адрес самовывоза, type: string }
-          - { name: pickupNote, label: Условия самовывоза, type: text }
-          - name: options
-            label: Способы доставки
-            type: object
-            list: true
-            fields:
-              - { name: id, label: Код латиницей, type: string }
-              - { name: name, label: Название, type: string }
-              - { name: price, label: Цена числом (0 — если зависит от заказа), type: number }
-              - { name: priceText, label: Цена текстом, type: string }
-              - { name: time, label: Срок, type: string }
-              - { name: text, label: Как работает, type: text }
-              - { name: askPoint, label: Спрашивать адрес пункта выдачи, type: boolean }
-      - name: firing
-        label: Текущий обжиг (то, что в продаже)
-        type: object
-        fields:
-          - { name: no, label: Номер, type: number }
-          - { name: opened, label: Дата открытия печи, type: date }
-          - { name: loaded, label: Загружено предметов, type: number }
-          - { name: rejects, label: Брак, type: number }
-      - name: next
-        label: Следующий обжиг (предзаказ)
-        type: object
-        fields:
-          - { name: no, label: Номер, type: number }
-          - { name: deadline, label: Последний день предзаказа, type: date }
-          - { name: loading, label: Загрузка, type: date }
-          - { name: firing, label: Обжиг, type: date }
-          - { name: opening, label: Открытие, type: date }
-      - name: forms
-        label: Формы посуды
-        type: object
-        list: true
-        fields:
-          - { name: id, label: Код латиницей (mug, bowl…), type: string, required: true }
-          - { name: name, label: Название, type: string, required: true }
-          - name: cat
-            label: Тип
-            type: select
-            options:
-              values:
-                - { value: cups, label: Кружки и стаканы }
-                - { value: bowls, label: Миски и пиалы }
-                - { value: plates, label: Тарелки и блюда }
-                - { value: jugs, label: Молочники }
-          - { name: handle, label: С ручкой, type: boolean }
-          - { name: use, label: Для чего и чем удобна, type: text }
-          - { name: volume, label: Объём, мл (0 — для тарелок), type: number }
-          - { name: d, label: Диаметр, см, type: number }
-          - { name: h, label: Высота, см, type: number }
-          - { name: weight, label: Вес, г, type: number }
-          - { name: price, label: Цена, ₽, type: number }
-          - { name: made, label: Вышло из печи в текущем обжиге, type: number }
-          - { name: slotsTotal, label: Мест на предзаказ в следующий обжиг, type: number }
-          - { name: slotsTaken, label: Из них занято, type: number }
-          - name: variants
-            label: Глазури и остаток
-            type: object
-            list: true
-            fields:
-              - name: glaze
-                label: Глазурь
-                type: select
-                options:
-                  values:
-                    - { value: milk, label: Топлёное молоко }
-                    - { value: oat, label: Овсянка }
-                    - { value: sugar, label: Жжёный сахар }
-                    - { value: ash, label: Пепел }
-                    - { value: rye, label: Ржаная корка }
-              - { name: stock, label: В наличии, шт., type: number }
           - name: photos
-            label: Фото предмета
+            label: Фото
+            description: Одно горизонтальное или два рядом.
             type: image
             options:
               multiple: true
-      - name: log
-        label: Журнал обжигов (новый — первым)
+          - name: focus
+            label: Что важнее в кадре
+            type: select
+            options:
+              values:
+                - { value: center, label: Середина }
+                - { value: top, label: Верх }
+                - { value: bottom, label: Низ }
+      - name: contacts
+        label: Контакты
+        description: Пустые поля на сайте не показываются.
+        type: object
+        fields:
+          - { name: telegram, label: Telegram для заказов (ник), type: string }
+          - { name: channel, label: Telegram-канал (ник), type: string }
+          - { name: vk, label: ВКонтакте (адрес страницы после vk.com/), type: string }
+          - { name: whatsapp, label: WhatsApp (номер), type: string }
+          - { name: phone, label: Телефон, type: string }
+          - { name: email, label: Почта, type: string }
+      - name: delivery
+        label: Как получить
         type: object
         list: true
         fields:
-          - { name: no, label: Номер, type: number }
-          - { name: opened, label: Открыт, type: date }
-          - { name: loaded, label: Загружено, type: number }
-          - { name: rejects, label: Брак, type: number }
-          - { name: left, label: В наличии сейчас, type: number }
-          - { name: note, label: Что было, type: text }
+          - { name: name, label: Способ, type: string }
+          - { name: place, label: Адрес (для самовывоза), type: string }
+          - { name: price, label: Цена, description: "Например: 350 ₽", type: string }
+          - { name: time, label: Срок, description: "Например: 5–10 дней", type: string }
+          - { name: text, label: Как это работает, type: text }
+          - { name: send, label: Что прислать вам, type: string }
+      - name: texts
+        label: Тексты
+        description: Пустые на сайте не показываются.
+        type: object
+        fields:
+          - { name: about, label: О себе, type: text }
+          - { name: payment, label: Оплата, type: text }
+          - { name: packaging, label: Упаковка, type: text }
+          - { name: care, label: Уход, type: text }
